@@ -1,4 +1,4 @@
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import h5py
@@ -57,8 +57,8 @@ class Preprocessing_Taylor_Green():
         X = self.X_in[:self.l1]
         V = self.V_star[:self.l1]
 
-        plt.quiver(X[:, 0], X[:, 1], V[:, 0], V[:, 1])
-        plt.show()
+       #plt.quiver(X[:, 0], X[:, 1], V[:, 0], V[:, 1])
+       #plt.show()
 
 
     def velocity(self, X):
@@ -260,7 +260,7 @@ def pars_ini():
 
     #model
     parser.add_argument('--batch-size', type=int, default=16, help='input batch size for training (default: 16)')
-    parser.add_argument('--epochs', type=int, default=1, help='number of training epochs (default: 10)')
+    parser.add_argument('--epochs', type=int, default=20, help='number of training epochs (default: 10)')
     parser.add_argument('--lr', type=float, default=0.001, help='learning rate (default: 0.001)')
     parser.add_argument('--wdecay', type=float, default=0.003, help='weight decay in ADAM (default: 0.003)')
     parser.add_argument('--gamma', type=float, default=0.95,
@@ -345,25 +345,25 @@ class Taylor_green_vortex_PINN(nn.Module):
         return x
 
 # save state of the training
-def save_state(epoch,distrib_model,loss_acc,optimizer,res_name,grank,gwsize,is_best):
+def save_state(epoch,distrib_model,loss_acc,optimizer,res_name):#,grank,gwsize,is_best):
     rt = time.time()
     # find if is_best happened in any worker
-    is_best_m = par_allgather_obj(is_best,gwsize)
+    #is_best_m = par_allgather_obj(is_best,gwsize)
 
-    if any(is_best_m):
+    #if any(is_best_m):
         # find which rank is_best happened - select first rank if multiple
-        is_best_rank = np.where(np.array(is_best_m)==True)[0][0]
+    #is_best_rank = np.where(np.array(is_best_m)==True)[0][0]
 
-        # collect state
-        state = {'epoch': epoch + 1,
-                 'state_dict': distrib_model.state_dict(),
-                 'best_acc': loss_acc,
-                 'optimizer' : optimizer.state_dict()}
+    # collect state
+    state = {'epoch': epoch + 1,
+             'state_dict': distrib_model.state_dict(),
+             'best_acc': loss_acc,
+             'optimizer' : optimizer.state_dict()}
 
         # write on worker with is_best
-        if grank == is_best_rank:
-            torch.save(state,'./'+res_name)
-            print(f'DEBUG: state in {grank} is saved on epoch:{epoch} in {time.time()-rt} s')
+        #if grank == is_best_rank:
+    torch.save(state,'./'+res_name)
+    print(f'DEBUG: state is saved on epoch:{epoch} in {time.time()-rt} s')
 
 # deterministic dataloader
 '''def seed_worker(worker_id):
@@ -692,7 +692,8 @@ def main():
         loss_acc = 0.0
         count = 0
         for data in train_loader:
-            #print('Batch: ',count)
+            if count%500 ==0:
+                print('Batch: ',count)
             optimizer.zero_grad()
             #predictions = distrib_model(inputs)
 
@@ -712,9 +713,10 @@ def main():
         if epoch%10 == 0:
             print('train_loss: ',loss)
         # if a better state is found
-        #is_best = loss_acc < best_acc
-        '''if epoch % args.restart_int == 0 and not args.benchrun:
-            save_state(epoch, model, loss_acc, optimizer, res_name, grank, gwsize, is_best)'''
+        is_best = loss_acc < best_acc
+        if epoch % args.restart_int == 0 and not args.benchrun:
+            #save_state(epoch, model, loss_acc, optimizer, res_name, grank, gwsize, is_best)
+            save_state(epoch, model, loss_acc, optimizer, res_name)
 
             # reset best_acc
         #best_acc = min(loss_acc, best_acc)
@@ -729,9 +731,10 @@ def main():
         print(epoch)
     #finalise training
     # save final state
-    '''if not args.benchrun:
-        save_state(epoch, model, loss_acc, optimizer, res_name, grank, gwsize, True)
-    dist.barrier()'''
+    if not args.benchrun:
+        #save_state(epoch, model, loss_acc, optimizer, res_name, grank, gwsize, True)
+        save_state(epoch, model, loss_acc, optimizer, res_name)
+    #dist.barrier()
 
     #if grank == 0:
 
@@ -740,7 +743,6 @@ def main():
     print(f'TIMER: first epoch time: {first_ep_t} s')
     print(f'TIMER: last epoch time: {time.time() - lt} s')
     print(f'TIMER: total epoch time: {time.time() - et} s')
-    print(f'TIMER: average epoch time: {(time.time() - et) / args.epochs} s')
     if epoch > 0:
         print(f'TIMER: total epoch-1 time: {time.time() - et - first_ep_t} s')
         print(f'TIMER: average epoch-1 time: {(time.time() - et - first_ep_t) / (args.epochs - 1)} s')
