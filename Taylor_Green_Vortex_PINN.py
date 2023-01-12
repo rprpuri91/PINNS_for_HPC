@@ -260,7 +260,7 @@ def pars_ini():
 
     #model
     parser.add_argument('--batch-size', type=int, default=16, help='input batch size for training (default: 16)')
-    parser.add_argument('--epochs', type=int, default=20, help='number of training epochs (default: 10)')
+    parser.add_argument('--epochs', type=int, default=1000, help='number of training epochs (default: 10)')
     parser.add_argument('--lr', type=float, default=0.001, help='learning rate (default: 0.001)')
     parser.add_argument('--wdecay', type=float, default=0.003, help='weight decay in ADAM (default: 0.003)')
     parser.add_argument('--gamma', type=float, default=0.95,
@@ -528,9 +528,9 @@ def total_loss(data, device, rho, nu):
     loss_ns1 = loss_function(ns1, target2)
     loss_ns2 = loss_function(ns2, target3)
 
-    loss_variable = loss_function(predictions, exact)
+    #loss_variable = loss_function(predictions, exact)
 
-    return loss_continuity + loss_ns1 + loss_ns2 + loss_variable
+    return loss_continuity + loss_ns1 + loss_ns2 #+ loss_variable
 
 
 def main():
@@ -719,8 +719,8 @@ def main():
             #save_state(epoch, model, loss_acc, optimizer, res_name, grank, gwsize, is_best)
             save_state(epoch, model, loss_acc, optimizer, res_name)
             V_p_pred_norm = model.forward(X_in)
-            V_p_pred = preprocessing.denormalize(V_p_pred_norm)
-            result = [V_p_star, V_p_pred, loss_acc_list, epoch]
+            V_pred, p_pred = preprocessing.denormalize(V_p_pred_norm[:,0:2],V_p_pred_norm[:,2] )
+            result = [V_p_star, V_pred,p_pred, loss_acc_list, epoch]
             f = open('result_Taylot_green_vortex.pkl', 'wb')
             pickle.dump(result, f)
             f.close()
@@ -787,7 +787,7 @@ def main():
     # finalise testing
 
     V_p_pred_norm = model.forward(X_in)
-    V_p_pred = preprocessing.denormalize(V_p_pred_norm)
+    V_pred, p_pred = preprocessing.denormalize(V_p_pred_norm[:,0:2],V_p_pred_norm[:,2])
 
     # mean from gpus
 
@@ -795,7 +795,7 @@ def main():
     f_time = time.time() - st
     print(f'TIMER: final time: {f_time} s')
 
-    result = [V_p_star, V_p_pred, loss_acc_list, test_loss_acc, f_time]
+    result = [V_p_star, V_pred, p_pred, loss_acc_list, test_loss_acc, f_time]
     f = open('result_Taylot_green_vortex.pkl', 'wb')
     pickle.dump(result, f)
     f.close()
