@@ -611,6 +611,7 @@ def main():
     # create dataset
     train_dataset = torch.utils.data.TensorDataset(*tensors1)
     test_dataset = torch.utils.data.TensorDataset(*tensors2)
+    X_in = torch.from_numpy(X_in).float().to(device)
 
     # distribute dataset to workers
     # persistent workers
@@ -656,7 +657,7 @@ def main():
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.wdecay)
     scheduler_lr = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=args.gamma)
-
+    preprocessing = Preprocessing_Taylor_Green(rho, nu, 0.8)
     # resume state
     start_epoch = 0
     best_acc = np.Inf
@@ -717,6 +718,12 @@ def main():
         if epoch % args.restart_int == 0 and not args.benchrun:
             #save_state(epoch, model, loss_acc, optimizer, res_name, grank, gwsize, is_best)
             save_state(epoch, model, loss_acc, optimizer, res_name)
+            V_p_pred_norm = model.forward(X_in)
+            V_p_pred = preprocessing.denormalize(V_p_pred_norm)
+            result = [V_p_star, V_p_pred, loss_acc_list, epoch]
+            f = open('result_Taylot_green_vortex.pkl', 'wb')
+            pickle.dump(result, f)
+            f.close()
 
             # reset best_acc
         #best_acc = min(loss_acc, best_acc)
@@ -778,10 +785,8 @@ def main():
     print(f'TIMER: total testing time: {time.time() - et} s')
 
     # finalise testing
-    X_in = torch.from_numpy(X_in).float().to(device)
-    V_p_pred_norm = model.forward(X_in)
-    preprocessing = Preprocessing_Taylor_Green(rho, nu, 0.8)
 
+    V_p_pred_norm = model.forward(X_in)
     V_p_pred = preprocessing.denormalize(V_p_pred_norm)
 
     # mean from gpus
