@@ -243,7 +243,8 @@ def h5_loader(path):
         X_test = np.vstack([X_test_domain, X_test_left, X_test_right, X_test_top, X_test_bottom])
         V_p_train = np.vstack([V_p_train_domain, V_p_train_left, V_p_train_right, V_p_train_top,V_p_train_bottom])
         V_p_test = np.vstack([V_p_test_domain, V_p_test_left, V_p_test_right, V_p_test_top, V_p_test_bottom])
-
+    
+        h5.close()
     except Exception as e:
         print(e)
 
@@ -528,9 +529,9 @@ def total_loss(data, device, rho, nu):
     loss_ns1 = loss_function(ns1, target2)
     loss_ns2 = loss_function(ns2, target3)
 
-    #loss_variable = loss_function(predictions, exact)
+    loss_variable = loss_function(predictions, exact)
 
-    return loss_continuity + loss_ns1 + loss_ns2 #+ loss_variable
+    return loss_continuity + loss_ns1 + loss_ns2 + loss_variable
 
 
 def main():
@@ -720,8 +721,8 @@ def main():
             save_state(epoch, model, loss_acc, optimizer, res_name)
             V_p_pred_norm = model.forward(X_in)
             V_pred, p_pred = preprocessing.denormalize(V_p_pred_norm[:,0:2],V_p_pred_norm[:,2] )
-            result = [V_p_star, V_pred,p_pred, loss_acc_list, epoch]
-            f = open('result_Taylot_green_vortex.pkl', 'wb')
+            result = [V_p_star,V_p_pred_norm, V_pred,p_pred, loss_acc_list, epoch]
+            f = open('result_Taylor_green_vortex.pkl', 'wb')
             pickle.dump(result, f)
             f.close()
 
@@ -796,7 +797,7 @@ def main():
     print(f'TIMER: final time: {f_time} s')
 
     result = [V_p_star, V_pred, p_pred, loss_acc_list, test_loss_acc, f_time]
-    f = open('result_Taylot_green_vortex.pkl', 'wb')
+    f = open('result_Taylor_green_vortex.pkl', 'wb')
     pickle.dump(result, f)
     f.close()
 
