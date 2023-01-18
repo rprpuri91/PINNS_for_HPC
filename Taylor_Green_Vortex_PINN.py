@@ -9,7 +9,7 @@ import torch.distributed as dist
 import torch.nn.functional as F
 import torch.optim as optim
 import pickle
-import matplotlib.pyplot as plt
+
 
 def pars_ini():
     global args
@@ -35,7 +35,7 @@ def pars_ini():
                         help='do a test run with seed (default: False)')
     parser.add_argument('--nseed', type=int, default=0,
                         help='seed integer for reproducibility (default: 0)')
-    parser.add_argument('--log-int', type=int, default=10,
+    parser.add_argument('--log-int', type=int, default=200,
                         help='log interval per training')
 
     # parallel parsers
@@ -60,9 +60,6 @@ class Taylor_green_vortex_PINN(nn.Module):
         self.activation = nn.Tanh()
         self.activation2 = nn.LeakyReLU(negative_slope=0.01, inplace=False)
 
-        # loss function
-        self.loss_function = nn.MSELoss(reduction='mean')
-
         self.layers = layers
 
         # layers
@@ -73,7 +70,7 @@ class Taylor_green_vortex_PINN(nn.Module):
             X = torch.from_numpy(X)
 
 
-        x = self.scaling(X)
+        x = scaling(X)
         # convert to float
         a = x.float()
 
@@ -97,13 +94,13 @@ class Taylor_green_vortex_PINN(nn.Module):
 
         return a
 
-    def scaling(self, X):
+def scaling(X):
 
-        mean, std, var = torch.mean(X), torch.std(X), torch.var(X)
-        # preprocessing input
-        x = (X - mean) / (std)  # feature scaling
+    mean, std, var = torch.mean(X), torch.std(X), torch.var(X)
+    # preprocessing input
+    x = (X - mean) / (std)  # feature scaling
 
-        return x
+    return x
 
 def h5_loader(path):
     h5 = h5py.File('data_Taylor_Green_Vortex.h5', 'r')
@@ -164,7 +161,7 @@ def h5_loader(path):
         X_test = np.vstack([X_test_domain, X_test_left, X_test_right, X_test_top, X_test_bottom])
         V_p_train = np.vstack([V_p_train_domain, V_p_train_left, V_p_train_right, V_p_train_top,V_p_train_bottom])
         V_p_test = np.vstack([V_p_test_domain, V_p_test_left, V_p_test_right, V_p_test_top, V_p_test_bottom])
-        print('shape',V_p_train.shape)
+        #print('shape',V_p_train.shape)
     except Exception as e:
         print(e)
 
@@ -179,7 +176,7 @@ def train(model, device , train_loader, optimizer, epoch,grank, gwsize, rho, nu)
     count = 0
     for batch_idx, (data) in enumerate(train_loader):
         t = time.perf_counter()
-        if count % 500 == 0:
+        if count % 1000 == 0:
             print('Batch: ', count)
         optimizer.zero_grad()
         # predictions = distrib_model(inputs)
@@ -314,18 +311,19 @@ def par_allgather_obj(obj,gwsize):
 
 def prediction(x,y,t):
     g = torch.cat((x, y, t), dim=1)
-    predictions = distrib_model.forward(g)
+    predictions = distrib_model(g)
     return predictions
 
 def pred_hessian_u(x,y,t):
     g = torch.cat((x, y, t), dim=1)
-    predictions = distrib_model.forward(g)
+    predictions = distrib_model(g)
     return predictions[:,0].sum()
 
 def pred_hessian_v(x,y,t):
     g = torch.cat((x, y, t), dim=1)
-    predictions = distrib_model.forward(g)
+    predictions = distrib_model(g)
     return predictions[:,1].sum()
+
 def total_loss(data, device, rho, nu):
 
     loss_function = nn.MSELoss()
@@ -399,9 +397,9 @@ def total_loss(data, device, rho, nu):
     loss_ns1 = loss_function(ns1, target2)
     loss_ns2 = loss_function(ns2, target3)
 
-    #loss_variable = loss_function(predictions, exact)
+    loss_variable = loss_function(predictions, exact)
 
-    return loss_continuity + loss_ns1 + loss_ns2 #+ loss_variable
+    return loss_continuity + loss_ns1 + loss_ns2 + loss_variable
 
 
 
@@ -508,15 +506,15 @@ def main():
     # deterministic testrun - the same dataset each run
     kwargs = {'worker_init_fn': seed_worker, 'generator': g} if args.testrun else {}
 
-    train_loader = torch.utils.data.Dataloader(train_dataset, batch_size=args.batch_size,
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size,
                                                sampler=train_sampler,
-                                               num_worker=args.nworker, pin_memory=True,
+                                               num_workers=args.nworker, pin_memory=False,
                                                persistent_workers=pers_w, drop_last=True,
-                                               prefetch_fsactor=args.prefetch, **kwargs)
-    test_loader = torch.utils.data.Dataloader(test_dataset, batch_size=2, sampler=test_sampler,
-                                              num_worker=args.nworker, pin_memory=True,
+                                               prefetch_factor=args.prefetch, **kwargs)
+    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=2, sampler=test_sampler,
+                                              num_workers=args.nworker, pin_memory=False,
                                               persistent_workers=pers_w, drop_last=True,
-                                              prefetch_fsactor=args.prefetch, **kwargs)
+                                              prefetch_factor=args.prefetch, **kwargs)
 
     '''train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size,
                                                pin_memory=True, drop_last=True,
@@ -535,14 +533,14 @@ def main():
     global distrib_model
     # distribute model tpo workers
     if args.cuda:
-        distrib_model = torch.nn.parellel.DistributedDataParallel(model,\
-                        device_ids = [device], output_device=device)
+        distrib_model = torch.nn.parallel.DistributedDataParallel(model,\
+                        device_ids = [device], output_device=device, find_unused_parameters = True)
     else:
-        distrib_model = torch.nn.parallel.DistributedDataParallel(model)
+        distrib_model = torch.nn.parallel.DistributedDataParallel(model, find_unused_parameters = True)
 
     # optimizer
-    optimizer = torch.optim.SGD(distrib_model.parameters(), lr=args.lr, momentum=args.momentum)
-    scheduler_lr = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=args.gamma)
+    optimizer = torch.optim.SGD(distrib_model.parameters(), lr=args.lr)
+    #scheduler_lr = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=args.gamma)
 
     # resume state
     start_epoch = 1
@@ -624,7 +622,7 @@ def main():
             V_pred = V_p_pred_norm[:, 0:2] * (V_max - V_min) + V_min
             p_pred = V_p_pred_norm[:, 0] * (p_max - p_min) + p_min
             result = [V_p_star, V_pred, p_pred, loss_acc_list, epoch]
-            f = open('result_Taylot_green_vortex.pkl', 'wb')
+            f = open('result_Taylor_green_vortex.pkl', 'wb')
             pickle.dump(result, f)
             f.close()
 
