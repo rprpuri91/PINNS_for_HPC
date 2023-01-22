@@ -55,8 +55,8 @@ def h5_loader(path):
         p_star = np.array(full.get('data4'))
 
         V_p_star = np.vstack([u_star, v_star, p_star])
-
-        print('start',V_p_star.shape)
+        V_p_star = V_p_star.T
+        print('star',V_p_star)
         '''print(X_train_domain.shape)
         print(X_train_left.shape)
         print(X_train_right.shape)
@@ -646,10 +646,12 @@ def main():
     # clean-up
     dist.destroy_process_group()
 
-if __name__ == "__main__":
+'''if __name__ == "__main__":
     main()
-    sys.exit()
+    sys.exit()'''
 
+path = '../Data/data_Taylor_Green_Vortex.h5'
+h5_loader(path)
 
 
 
