@@ -11,181 +11,9 @@ import pickle
 torch.manual_seed(1234)
 
 np.random.seed(1234)
-class Preprocessing_Taylor_Green():
-    def __init__(self, rho, nu, n):
-
-        self.rho = rho
-        self.nu = nu
-        self.n = n
-
-        x_values = np.arange(0, np.pi, 0.1).tolist()
-        y_values = np.arange(0, np.pi, 0.1).tolist()
-        t = np.arange(0, 1, 0.01)
-        x_values.append(np.pi)
-        y_values.append(np.pi)
-
-        x,y = np.meshgrid(x_values, y_values)
-        #y0,x0 = np.meshgrid(y_values, x_values)
-
-        #X_in = np.hstack([x.flatten()[:, None], y.flatten()[:, None]])
-
-        x1, t1 = np.meshgrid(x, t)
-        y1, t2 = np.meshgrid(y, t)
-        #y2, t2 = np.meshgrid(y0,t)
-
-        self.X_in = np.hstack([x1.flatten()[:,None], y1.flatten()[:,None], t1.flatten()[:,None]])
-        X0 = np.zeros(y1.flatten().shape)
-        Xpi = np.zeros(y1.flatten().shape)
-        Xpi[:] = np.pi
-
-
-        self.V_star = self.velocity(self.X_in)
-        self.p_star = self.pressure(self.X_in)
-
-        self.V_min = self.V_star.min()
-        self.V_max = self.V_star.max()
-        self.p_min = self.p_star.min()
-        self.p_max = self.p_star.max()
-
-        self.X_bottom = np.vstack([x1.flatten(), X0, t1.flatten()]).T
-        self.X_top = np.vstack([x1.flatten(), Xpi, t1.flatten()]).T
-        self.X_left = np.vstack([X0, x1.flatten(), t1.flatten()]).T
-        self.X_right = np.vstack([Xpi, x1.flatten(), t1.flatten()]).T
-
-        self.l1 = len(x.flatten())
-
-        X = self.X_in[:self.l1]
-        V = self.V_star[:self.l1]
-
-       #plt.quiver(X[:, 0], X[:, 1], V[:, 0], V[:, 1])
-       #plt.show()
-
-
-    def velocity(self, X):
-        #F(t) = e^(-2*nu*t)
-        #u = sinx*cosy*F(t)
-        #v = -cosx*siny*F(t)
-
-        U = []
-
-
-        for i in range(len(X)):
-            f = -2*self.nu*X[i][2]
-            F = np.exp(f)
-            u0 = np.sin(X[i][0])*np.cos(X[i][1])*F
-            v0 = -np.cos(X[i][0])*np.sin(X[i][1])*F
-            U0 = [u0,v0]
-            U.append(U0)
-
-        U_numpy = np.array(U)
-
-        return U_numpy
-
-    def pressure(self, X):
-        #p = (rho/4)*(cos2x + sin2y)*F^2
-
-        p = []
-
-        for i in range(len(X)):
-            f = -2 * self.nu * X[i][2]
-            F = np.exp(f)
-            p0 = self.rho*(np.cos(2*X[i][0]) + np.sin(2*X[i][1]))*F
-            p.append(p0)
-
-        p_numpy = np.array(p)
-
-        return p_numpy
-
-    def normalize(self, V, p):
-        V_norm = (V - self.V_min) / (self.V_max - self.V_min)
-
-        p_norm = (p -self.p_min) / (self.p_max - self.p_min)
-        return V_norm, p_norm
-
-    def denormalize(self, V_norm, p_norm):
-        V = V_norm * (self.V_max - self.V_min) + self.V_min
-
-        p = p_norm * (self.p_max - self.p_min) + self.p_min
-        return V,p
-
-
-    def train_test(self,X):
-        N = int(self.n * len(X))
-
-        idx = np.random.choice(X.shape[0], N, replace=False)
-
-        X_train = X[idx,:]
-
-        X_test = np.delete(X, idx, axis=0)
-
-        V_train = self.velocity(X_train)
-        V_test = self.velocity(X_test)
-
-        p_train = self.pressure(X_train)
-        p_test = self.pressure(X_test)
-
-        V_train_norm, p_train_norm = self.normalize(V_train,p_train)
-
-        V_test_norm, p_test_norm = self.normalize(V_test, p_test)
-
-        V_p_train = np.vstack([V_train_norm[:,0], V_train_norm[:,1], p_train_norm])
-        V_p_test = np.vstack([V_test_norm[:,0], V_test_norm[:,1], p_test_norm])
-
-        return V_p_train.T, X_train, V_p_test.T, X_test
-
-    def data_generation(self):
-
-        N2 = int(0.3 * len(self.X_in))
-
-        idx = np.random.choice(self.X_in.shape[0], N2, replace=False)
-        X_domain = self.X_in[idx, :]
-
-        V_p_train_domain, X_train_domain, V_p_test_domain, X_test_domain = self.train_test(X_domain)
-        V_p_train_left, X_train_left, V_p_test_left, X_test_left = self.train_test(self.X_left)
-        V_p_train_right, X_train_right, V_p_test_right, X_test_right = self.train_test(self.X_right)
-        V_p_train_top, X_train_top, V_p_test_top, X_test_top = self.train_test(self.X_top)
-        V_p_train_bottom, X_train_bottom, V_p_test_bottom, X_test_bottom = self.train_test(self.X_bottom)
-
-        h5 = h5py.File('data_Taylor_Green_Vortex.h5', 'w')
-        g1 = h5.create_group('domain')
-        g1.create_dataset('data1', data=X_train_domain)
-        g1.create_dataset('data2', data=V_p_train_domain)
-        g1.create_dataset('data3', data=X_test_domain)
-        g1.create_dataset('data4', data=V_p_test_domain)
-
-        g2 = h5.create_group('left')
-        g2.create_dataset('data1', data=X_train_left)
-        g2.create_dataset('data2', data=V_p_train_left)
-        g2.create_dataset('data3', data=X_test_left)
-        g2.create_dataset('data4', data=V_p_test_left)
-
-        g3 = h5.create_group('right')
-        g3.create_dataset('data1', data=X_train_right)
-        g3.create_dataset('data2', data=V_p_train_right)
-        g3.create_dataset('data3', data=X_test_right)
-        g3.create_dataset('data4', data=V_p_test_right)
-
-        g4 = h5.create_group('top')
-        g4.create_dataset('data1', data=X_train_top)
-        g4.create_dataset('data2', data=V_p_train_top)
-        g4.create_dataset('data3', data=X_test_top)
-        g4.create_dataset('data4', data=V_p_test_top)
-
-        g5 = h5.create_group('bottom')
-        g5.create_dataset('data1', data=X_train_bottom)
-        g5.create_dataset('data2', data=V_p_train_bottom)
-        g5.create_dataset('data3', data=X_test_bottom)
-        g5.create_dataset('data4', data=V_p_test_bottom)
-
-        g6 = h5.create_group('full')
-        g6.create_dataset('data1', data=self.X_in)
-        g6.create_dataset('data2', data=self.V_star)
-        g6.create_dataset('data3', data=self.p_star)
-
-        h5.close()
 
 def h5_loader(path):
-    h5 = h5py.File('data_Taylor_Green_Vortex.h5', 'r')
+    h5 = h5py.File(path, 'r')
 
     try:
         domain = h5.get('domain')
@@ -222,12 +50,13 @@ def h5_loader(path):
         V_p_test_bottom = np.array(bottom.get('data4'))
 
         X_in = np.array(full.get('data1'))
-        V_star = np.array(full.get('data2'))
-        p_star = np.array(full.get('data3'))
+        u_star = np.array(full.get('data2'))
+        v_star = np.array(full.get('data3'))
+        p_star = np.array(full.get('data4'))
 
-        V_p_star = np.vstack([V_star[:, 0], V_star[:, 1], p_star])
+        V_p_star = np.vstack([u_star, v_star, p_star])
 
-
+        print('start',V_p_star.shape)
         '''print(X_train_domain.shape)
         print(X_train_left.shape)
         print(X_train_right.shape)
@@ -299,9 +128,6 @@ class Taylor_green_vortex_PINN(nn.Module):
         self.activation = nn.Tanh()
         self.activation2 = nn.LeakyReLU(negative_slope=0.01, inplace=False)
 
-        # loss function
-        self.loss_function = nn.MSELoss(reduction='mean')
-
         self.layers = layers
 
         # layers
@@ -325,10 +151,12 @@ class Taylor_green_vortex_PINN(nn.Module):
             a = self.fc4(a)
 
             '''
-        for i in range(len(self.layers) - 3):
+        for i in range(len(self.layers) - 2):
             z = self.linears[i](a)
 
             a = self.activation2(z)
+
+        a = self.linears[-2](a)
 
         a = self.activation(a)
 
@@ -336,37 +164,37 @@ class Taylor_green_vortex_PINN(nn.Module):
 
         return a
 
-    def scaling(self, X):
+def scaling(self, X):
 
-        mean, std, var = torch.mean(X), torch.std(X), torch.var(X)
-        # preprocessing input
-        x = (X - mean) / (std)  # feature scaling
+    mean, std, var = torch.mean(X), torch.std(X), torch.var(X)
+    # preprocessing input
+    x = (X - mean) / (std)  # feature scaling
 
-        return x
+    return x
 
 # save state of the training
-def save_state(epoch,distrib_model,loss_acc,optimizer,res_name):#,grank,gwsize,is_best):
+def save_state(epoch,distrib_model,loss_acc,optimizer,res_name,grank,gwsize,is_best):
     rt = time.time()
     # find if is_best happened in any worker
-    #is_best_m = par_allgather_obj(is_best,gwsize)
+    is_best_m = par_allgather_obj(is_best,gwsize)
 
-    #if any(is_best_m):
+    if any(is_best_m):
         # find which rank is_best happened - select first rank if multiple
-    #is_best_rank = np.where(np.array(is_best_m)==True)[0][0]
+        is_best_rank = np.where(np.array(is_best_m)==True)[0][0]
 
-    # collect state
-    state = {'epoch': epoch + 1,
-             'state_dict': distrib_model.state_dict(),
-             'best_acc': loss_acc,
-             'optimizer' : optimizer.state_dict()}
+        # collect state
+        state = {'epoch': epoch + 1,
+                 'state_dict': distrib_model.state_dict(),
+                 'best_acc': loss_acc,
+                 'optimizer' : optimizer.state_dict()}
 
         # write on worker with is_best
-        #if grank == is_best_rank:
-    torch.save(state,'./'+res_name)
-    print(f'DEBUG: state is saved on epoch:{epoch} in {time.time()-rt} s')
+        if grank == is_best_rank:
+            torch.save(state,'./'+res_name)
+            print(f'DEBUG: state is saved on epoch:{epoch} in {time.time()-rt} s')
 
 # deterministic dataloader
-'''def seed_worker(worker_id):
+def seed_worker(worker_id):
     worker_seed = torch.initial_seed() % 2**32
     np.random.seed(worker_seed)
     random.seed(worker_seed)
@@ -399,7 +227,7 @@ def par_min(field):
     res = torch.tensor(field).float()
     res = res.cuda() if args.cuda else res.cpu()
     dist.all_reduce(res,op=dist.ReduceOp.MIN,group=None,async_op=True).wait()
-    return res'''
+    return res
 
 # reduce field to destination with an operation
 def par_reduce(field,dest,oper):
@@ -438,18 +266,19 @@ def par_allgather_obj(obj,gwsize):
 
 def prediction(x,y,t):
     g = torch.cat((x, y, t), dim=1)
-    predictions = model.forward(g)
+    predictions = distrib_model.forward(g)
     return predictions
 
 def pred_hessian_u(x,y,t):
     g = torch.cat((x, y, t), dim=1)
-    predictions = model.forward(g)
+    predictions = distrib_model(g)
     return predictions[:,0].sum()
 
 def pred_hessian_v(x,y,t):
     g = torch.cat((x, y, t), dim=1)
-    predictions = model.forward(g)
+    predictions = distrib_model(g)
     return predictions[:,1].sum()
+
 def total_loss(data, device, rho, nu):
 
     loss_function = nn.MSELoss()
@@ -532,6 +361,15 @@ def total_loss(data, device, rho, nu):
 
     return loss_continuity + loss_ns1 + loss_ns2 + loss_variable
 
+def denormalize(self, V_p_norm, u_min, u_max, v_min, v_max, p_min, p_max):
+    u_norm = V_p_norm[:,0]
+    v_norm = V_p_norm[:,1]
+    p_norm = V_p_norm[:,2]
+    u = ((u_norm + 1) * (u_max - u_min) / 2) + u_min
+    v = ((v_norm + 1) * (v_max - v_min) / 2) + v_min
+    p = ((p_norm + 1) * (p_max - p_min) / 2) + p_min
+
+    return u, v, p
 
 def main():
 
@@ -548,7 +386,7 @@ def main():
     st = time.time()
 
     # initialize distributed backend
-    #dist.init_process_group(backend=args.backend)
+    dist.init_process_group(backend=args.backend)
 
     # deterministic testrun
     if args.testrun:
@@ -557,14 +395,14 @@ def main():
         g.manual_seed(args.nseed)
 
     #  get job rank
-    '''lwsize = torch.cuda.device_count() if args.cuda else 0 # local world size - per node
+    lwsize = torch.cuda.device_count() if args.cuda else 0 # local world size - per node
     gwsize = dist.get_world_size() # global world size - per run
     grank = dist.get_rank() # global rank - assign per run
-    lrank = dist.get_rank()%lwsize # local rank - assign per node'''
+    lrank = dist.get_rank()%lwsize # local rank - assign per node
 
     #if grank == 0:
     print('TIMER: initialise:', time.time() - st, 's')
-    #print('DEBUG: local ranks:', lwsize, '/ global ranks:', gwsize)
+    print('DEBUG: local ranks:', lwsize, '/ global ranks:', gwsize)
     print('DEBUG: sys.version:', sys.version, '\n')
 
     print('DEBUG: IO parsers:')
@@ -593,47 +431,56 @@ def main():
 
     # encapsulate the model on the GPU assigned to the current process
     device = torch.device('cuda' if args.cuda and torch.cuda.is_available() else 'cpu') #lrank)
-    '''if args.cuda:
+    if args.cuda:
         torch.cuda.set_device(lrank)
         if args.testrun:
-            torch.cuda.manual_seed(args.nseed)'''
+            torch.cuda.manual_seed(args.nseed)
 
     X_train, V_p_train, X_test, V_p_test, X_in, V_p_star = h5_loader(args.data_dir)
+
+    u_min = V_p_star[:,0].min()
+    u_max = V_p_star[:,0].max()
+    v_min = V_p_star[:,1].min()
+    v_max = V_p_star[:,1].max()
+    p_min = V_p_star[:,2].min()
+    p_max = V_p_star[:,2].max()
 
     X_train = torch.from_numpy(X_train).float().to(device)
     X_test = torch.from_numpy(X_test).float().to(device)
     V_p_train = torch.from_numpy(V_p_train).float().to(device)
     V_p_test = torch.from_numpy(V_p_test).float().to(device)
 
-
     tensors1 = [X_train,V_p_train]
     tensors2 = [X_test,V_p_test]
+
     # create dataset
     train_dataset = torch.utils.data.TensorDataset(*tensors1)
     test_dataset = torch.utils.data.TensorDataset(*tensors2)
     X_in = torch.from_numpy(X_in).float().to(device)
 
+    # restricts data loading to a subset of the dataset exclusive to the current process
+    args.shuff = args.shuff and not args.testrun
+    train_sampler = torch.utils.data.distributed.DistributedSampler(
+        train_dataset, num_replicas=gwsize, rank=grank, shuffle=args.shuff)
+    test_sampler = torch.utils.data.distributed.DistributedSampler(
+        test_dataset, num_replicas=gwsize, rank=grank, shuffle=args.shuff)
+
     # distribute dataset to workers
     # persistent workers
-    #pers_w = True if args.nworker>1 else False
+    pers_w = True if args.nworker>1 else False
 
-    #kwargs = {'worker_init_fn': seed_worker, 'generator': g} if args.testrun else {}
+    kwargs = {'worker_init_fn': seed_worker, 'generator': g} if args.testrun else {}
 
-    '''train_loader = torch.utils.data.Dataloader(train_dataset, batch_size=args.batch_size,
-                                               num_worker=args.nworker, pin_memory=True,
+    train_loader = torch.utils.data.Dataloader(train_dataset, batch_size=args.batch_size,
+                                               sampler = train_sampler,
+                                               num_workers=args.nworker, pin_memory=True,
                                                persistent_workers=pers_w, drop_last=True,
-                                               prefetch_fsactor=args.prefetch, **kwargs)
-    test_loader = torch.utils.data.Dataloader(test_dataset, batch_size=2,
-                                              num_worker=args.nworker, pin_memory=True,
+                                               prefetch_factor=args.prefetch, **kwargs)
+    test_loader = torch.utils.data.Dataloader(test_dataset, batch_size=2, sampler = test_sampler,
+                                              num_workers=args.nworker, pin_memory=True,
                                               persistent_workers=pers_w, drop_last=True,
-                                              prefetch_fsactor=args.prefetch, **kwargs)'''
+                                              prefetch_factor=args.prefetch, **kwargs)
 
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size,
-                                               pin_memory=True, drop_last=True,
-                                               prefetch_factor=args.prefetch)
-    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=2,
-                                              pin_memory=True, drop_last=True,
-                                              prefetch_factor=args.prefetch)
 
     #if grank==0:
     print(f'TIMER: read data: {time.time()-st} s\n')
@@ -642,44 +489,44 @@ def main():
     rho = 1.2
     nu = 1.516e-5
     layers = np.array([3, 60, 60, 60, 60, 60, 3])
-    global model
+
     model = Taylor_green_vortex_PINN(layers).to(device)
 
     # distribute model tpo workers
-    '''global distrib_model
+    global distrib_model
     if args.cuda:
         distrib_model = torch.nn.parellel.DistributedDataParallel(model,\
                         device_ids = [device], output_device=device)
     else:
-        distrib_model = torch.nn.parallel.DistributedDataParallel(model)'''
+        distrib_model = torch.nn.parallel.DistributedDataParallel(model)
 
     # optimizer
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.wdecay)
     scheduler_lr = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=args.gamma)
-    preprocessing = Preprocessing_Taylor_Green(rho, nu, 0.8)
+
     # resume state
     start_epoch = 0
     best_acc = np.Inf
     res_name = 'checkpoint.pth.tar'
     if os.path.isfile(res_name) and not args.benchrun:
         try:
-            #dist.barrier()
+            dist.barrier()
             # Map model to be loaded to specified single gpu.
-            #loc = {'cuda:%d' % 0: 'cuda:%d' % lrank} if args.cuda else {'cpu:%d' % 0: 'cpu:%d' % lrank}
-            checkpoint = torch.load(program_dir + '/' + res_name) #, map_location=loc)
+            loc = {'cuda:%d' % 0: 'cuda:%d' % lrank} if args.cuda else {'cpu:%d' % 0: 'cpu:%d' % lrank}
+            checkpoint = torch.load(program_dir + '/' + res_name, map_location=loc)
             start_epoch = checkpoint['epoch']
             best_acc = checkpoint['best_acc']
             model.load_state_dict(checkpoint['state_dict'])
             optimizer.load_state_dict(checkpoint['optimizer'])
-            #if grank == 0:
-            print(f'WARNING: restarting from {start_epoch} epoch')
+            if grank == 0:
+                print(f'WARNING: restarting from {start_epoch} epoch')
         except:
-            #if grank == 0:
-            print(f'WARNING: restart file cannot be loaded, restarting!')
+            if grank == 0:
+                print(f'WARNING: restart file cannot be loaded, restarting!')
     if start_epoch >= args.epochs:
-        #if grank == 0:
-        print(f'WARNING: given epochs are less than the one in the restart file!\n'
+        if grank == 0:
+            print(f'WARNING: given epochs are less than the one in the restart file!\n'
                   f'WARNING: SYS.EXIT is issued')
         dist.destroy_process_group()
         sys.exit()
@@ -693,7 +540,7 @@ def main():
         loss_acc = 0.0
         count = 0
         for data in train_loader:
-            if count%500 ==0:
+            if count%1000 ==0:
                 print('Batch: ',count)
             optimizer.zero_grad()
             #predictions = distrib_model(inputs)
@@ -704,33 +551,33 @@ def main():
             optimizer.step()
 
             loss_acc+= loss.item()
-            '''if count % args.log_int == 0 and grank == 0 and lrank == 0:
+            if count % args.log_int == 0 and grank == 0 and lrank == 0:
                 print(f'Epoch: {epoch} / {100 * (count + 1) / len(train_loader):.2f}% complete', \
-                      f' / {time.time() - lt:.2f} s / accumulated loss: {loss_acc}\n')'''
+                      f' / {time.time() - lt:.2f} s / accumulated loss: {loss_acc}\n')
             count += 1
 
-        #if grank == 0 and lrank == 0:
-        loss_acc_list.append(loss_acc)
+        if grank == 0 and lrank == 0:
+            loss_acc_list.append(loss_acc)
         if epoch%10 == 0:
             print('train_loss: ',loss)
+
         # if a better state is found
         is_best = loss_acc < best_acc
         if epoch % args.restart_int == 0 and not args.benchrun:
-            #save_state(epoch, model, loss_acc, optimizer, res_name, grank, gwsize, is_best)
-            save_state(epoch, model, loss_acc, optimizer, res_name)
-            V_p_pred_norm = model.forward(X_in)
-            V_pred, p_pred = preprocessing.denormalize(V_p_pred_norm[:,0:2],V_p_pred_norm[:,2] )
-            result = [V_p_star,V_p_pred_norm, V_pred,p_pred, loss_acc_list, epoch]
+            save_state(epoch, model, loss_acc, optimizer, res_name, grank, gwsize, is_best)
+            V_p_pred_norm = distrib_model(X_in)
+            u_pred,v_pred,p_pred = denormalize(V_p_pred_norm, u_min, u_max, v_min, v_max, p_min, p_max)
+            result = [V_p_star,u_pred, v_pred,p_pred, loss_acc_list, epoch]
             f = open('result_Taylor_green_vortex.pkl', 'wb')
             pickle.dump(result, f)
             f.close()
 
             # reset best_acc
-        #best_acc = min(loss_acc, best_acc)
+            best_acc = min(loss_acc, best_acc)
 
         # profiling
-        #if grank == 0:
-        print('TIMER: epoch time:', time.time()-lt, 's')
+        if grank == 0:
+            print('TIMER: epoch time:', time.time()-lt, 's')
 
         if epoch == start_epoch:
             first_ep_t = time.time() - lt
@@ -739,28 +586,28 @@ def main():
     #finalise training
     # save final state
     if not args.benchrun:
-        #save_state(epoch, model, loss_acc, optimizer, res_name, grank, gwsize, True)
-        save_state(epoch, model, loss_acc, optimizer, res_name)
-    #dist.barrier()
+        save_state(epoch, model, loss_acc, optimizer, res_name, grank, gwsize, True)
+        #save_state(epoch, model, loss_acc, optimizer, res_name)
+    dist.barrier()
 
-    #if grank == 0:
+    if grank == 0:
 
-    print(f'\n--------------------------------------------------------')
-    print(f'DEBUG: training results:')
-    print(f'TIMER: first epoch time: {first_ep_t} s')
-    print(f'TIMER: last epoch time: {time.time() - lt} s')
-    print(f'TIMER: total epoch time: {time.time() - et} s')
-    if epoch > 0:
-        print(f'TIMER: total epoch-1 time: {time.time() - et - first_ep_t} s')
-        print(f'TIMER: average epoch-1 time: {(time.time() - et - first_ep_t) / (args.epochs - 1)} s')
-    #print('DEBUG: memory req:', int(torch.cuda.memory_reserved(lrank) / 1024 / 1024), 'MB') \
-        #if args.cuda else 'DEBUG: memory req: - MB'
+        print(f'\n--------------------------------------------------------')
+        print(f'DEBUG: training results:')
+        print(f'TIMER: first epoch time: {first_ep_t} s')
+        print(f'TIMER: last epoch time: {time.time() - lt} s')
+        print(f'TIMER: total epoch time: {time.time() - et} s')
+        if epoch > 0:
+            print(f'TIMER: total epoch-1 time: {time.time() - et - first_ep_t} s')
+            print(f'TIMER: average epoch-1 time: {(time.time() - et - first_ep_t) / (args.epochs - 1)} s')
+        #print('DEBUG: memory req:', int(torch.cuda.memory_reserved(lrank) / 1024 / 1024), 'MB') \
+            #if args.cuda else 'DEBUG: memory req: - MB'
 
-    torch.save(loss_acc_list, './loss_acc_per_ep.pt')
+        torch.save(loss_acc_list, './loss_acc_per_ep.pt')
 
 # testing loop
     et = time.time()
-    #model.eval()
+    distrib_model.eval()
     test_loss = 0.0
     #mean_sqr_diff = []
     #count = 0
@@ -769,8 +616,6 @@ def main():
         for data in test_loader:
             #print(data)
             inputs = data[0]
-
-            #predictions = distrib_model(inputs)
 
             loss = total_loss(data, device, rho,nu)
 
@@ -786,22 +631,20 @@ def main():
 
     # finalise testing
 
-    V_p_pred_norm = model.forward(X_in)
-    V_pred, p_pred = preprocessing.denormalize(V_p_pred_norm[:,0:2],V_p_pred_norm[:,2])
+    V_p_pred_norm = distrib_model(X_in)
+    u_pred, v_pred, p_pred = denormalize(V_p_pred_norm, u_min, u_max, v_min, v_max, p_min, p_max)
 
-    # mean from gpus
+    if grank==0:
+        f_time = time.time() - st
+        print(f'TIMER: final time: {f_time} s')
 
-    #if grank==0:
-    f_time = time.time() - st
-    print(f'TIMER: final time: {f_time} s')
-
-    result = [V_p_star, V_pred, p_pred, loss_acc_list, test_loss_acc, f_time]
+    result = [V_p_star, u_pred, v_pred, p_pred, loss_acc_list,test_loss_acc, f_time]
     f = open('result_Taylor_green_vortex.pkl', 'wb')
     pickle.dump(result, f)
     f.close()
 
-        # clean-up
-        #dist.destroy_process_group()
+    # clean-up
+    dist.destroy_process_group()
 
 if __name__ == "__main__":
     main()
