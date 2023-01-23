@@ -13,7 +13,7 @@ torch.manual_seed(1234)
 np.random.seed(1234)
 
 def h5_loader(path):
-    h5 = h5py.File(path, 'r')
+    h5 = h5py.File('./data/data_Taylor_Green_Vortex.h5', 'r')
 
     try:
         domain = h5.get('domain')
@@ -56,7 +56,7 @@ def h5_loader(path):
 
         V_p_star = np.vstack([u_star, v_star, p_star])
         V_p_star = V_p_star.T
-        print('star',V_p_star)
+        #print('star',V_p_star)
         '''print(X_train_domain.shape)
         print(X_train_left.shape)
         print(X_train_right.shape)
@@ -471,12 +471,12 @@ def main():
 
     kwargs = {'worker_init_fn': seed_worker, 'generator': g} if args.testrun else {}
 
-    train_loader = torch.utils.data.Dataloader(train_dataset, batch_size=args.batch_size,
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size,
                                                sampler = train_sampler,
                                                num_workers=args.nworker, pin_memory=True,
                                                persistent_workers=pers_w, drop_last=True,
                                                prefetch_factor=args.prefetch, **kwargs)
-    test_loader = torch.utils.data.Dataloader(test_dataset, batch_size=2, sampler = test_sampler,
+    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=2, sampler = test_sampler,
                                               num_workers=args.nworker, pin_memory=True,
                                               persistent_workers=pers_w, drop_last=True,
                                               prefetch_factor=args.prefetch, **kwargs)
@@ -495,7 +495,7 @@ def main():
     # distribute model tpo workers
     global distrib_model
     if args.cuda:
-        distrib_model = torch.nn.parellel.DistributedDataParallel(model,\
+        distrib_model = torch.nn.parallel.DistributedDataParallel(model,\
                         device_ids = [device], output_device=device)
     else:
         distrib_model = torch.nn.parallel.DistributedDataParallel(model)
@@ -646,12 +646,10 @@ def main():
     # clean-up
     dist.destroy_process_group()
 
-'''if __name__ == "__main__":
+if __name__ == "__main__":
     main()
-    sys.exit()'''
+    sys.exit()
 
-path = '../Data/data_Taylor_Green_Vortex.h5'
-h5_loader(path)
 
 
 
