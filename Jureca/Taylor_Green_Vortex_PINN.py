@@ -83,10 +83,12 @@ class Taylor_green_vortex_PINN(nn.Module):
             a = self.fc4(a)
 
             '''
-        for i in range(len(self.layers) - 3):
+        for i in range(len(self.layers) - 2):
             z = self.linears[i](a)
 
             a = self.activation2(z)
+
+        a = self.linears[-2](a)        
 
         a = self.activation(a)
 
@@ -103,7 +105,7 @@ def scaling(X):
     return x
 
 def h5_loader(path):
-    h5 = h5py.File('data_Taylor_Green_Vortex.h5', 'r')
+    h5 = h5py.File(path, 'r')
 
     try:
         domain = h5.get('domain')
@@ -140,11 +142,13 @@ def h5_loader(path):
         V_p_test_bottom = np.array(bottom.get('data4'))
 
         X_in = np.array(full.get('data1'))
-        V_star = np.array(full.get('data2'))
-        p_star = np.array(full.get('data3'))
+        u_star = np.array(full.get('data2'))
+        v_star = np.array(full.get('data3'))
+        p_star = np.array(full.get('data4'))
 
-        V_p_star = np.vstack([V_star[:, 0], V_star[:, 1], p_star])
-        print(V_p_star)
+        V_p_star = np.vstack([u_star, v_star, p_star])
+        V_p_star = V_p_star.T
+        #print(V_p_star)
 
         '''print(X_train_domain.shape)
         print(X_train_left.shape)
@@ -181,7 +185,7 @@ def train(model, device , train_loader, optimizer, epoch,grank, gwsize, rho, nu)
         optimizer.zero_grad()
         # predictions = distrib_model(inputs)
 
-        loss = total_loss(data, device, rho, nu)
+        loss = total_loss(model, data, device, rho, nu)
 
         loss.backward()
         optimizer.step()
@@ -206,9 +210,10 @@ def test(model, device, test_loader, grank, gwsize, rho, nu):
     with torch.no_grad():
         for data in test_loader:
             # print(data)
+
             inputs = data[0]
 
-            loss = total_loss(data, device, rho, nu)
+            loss = total_loss(model, data, device, rho, nu)
 
             test_loss += loss.item() / inputs.shape[0]
 
@@ -216,6 +221,17 @@ def test(model, device, test_loader, grank, gwsize, rho, nu):
             test_loss_acc.append(test_loss)
 
     return test_loss_acc
+
+def denormalize(self, V_p_norm, u_min, u_max, v_min, v_max, p_min, p_max):
+    u_norm = V_p_norm[:,0]
+    v_norm = V_p_norm[:,1]
+    p_norm = V_p_norm[:,2]
+
+    u = ((u_norm + 1) * (u_max - u_min) / 2) + u_min
+    v = ((v_norm + 1) * (v_max - v_min) / 2) + v_min
+    p = ((p_norm + 1) * (p_max - p_min) / 2) + p_min
+
+    return u, v, p
 
 # save state of the training
 def save_state(epoch,distrib_model,loss_acc,optimizer,res_name, grank, gwsize, is_best):#,grank,gwsize,is_best):
@@ -311,20 +327,20 @@ def par_allgather_obj(obj,gwsize):
 
 def prediction(x,y,t):
     g = torch.cat((x, y, t), dim=1)
-    predictions = distrib_model(g)
+    predictions = d_model(g)
     return predictions
 
 def pred_hessian_u(x,y,t):
     g = torch.cat((x, y, t), dim=1)
-    predictions = distrib_model(g)
+    predictions = d_model(g)
     return predictions[:,0].sum()
 
 def pred_hessian_v(x,y,t):
     g = torch.cat((x, y, t), dim=1)
-    predictions = distrib_model(g)
+    predictions = d_model(g)
     return predictions[:,1].sum()
 
-def total_loss(data, device, rho, nu):
+def total_loss(model, data, device, rho, nu):
 
     loss_function = nn.MSELoss()
 
@@ -332,6 +348,8 @@ def total_loss(data, device, rho, nu):
 
     g = inputs.clone()
     g.requires_grad = True
+
+    global d_model = model
 
     exact = data[1]
 
@@ -476,6 +494,13 @@ def main():
     V_p_train = torch.from_numpy(V_p_train).float().to(device)
     V_p_test = torch.from_numpy(V_p_test).float().to(device)
 
+    u_min = V_p_star[:,0].min()
+    u_max = V_p_star[:,0].max()
+    v_min = V_p_star[:,1].min()
+    v_max = V_p_star[:,1].max()
+    p_min = V_p_star[:,2].min()
+    p_max = V_p_star[:,2].max()
+
     rho = 1.2
     nu = 1.516e-5
 
@@ -530,7 +555,7 @@ def main():
 
     layers = np.array([3, 60, 60, 60, 60, 60, 3])
     model = Taylor_green_vortex_PINN(layers).to(device)
-    global distrib_model
+    
     # distribute model tpo workers
     if args.cuda:
         distrib_model = torch.nn.parallel.DistributedDataParallel(model,\
@@ -618,10 +643,9 @@ def main():
             save_state(epoch, model, loss_acc, optimizer, res_name, grank, gwsize, is_best)
             #save_state(epoch, model, loss_acc, optimizer, res_name)
             best_acc = min(loss_acc, best_acc)
-            V_p_pred_norm = model.forward(X_in)
-            V_pred = V_p_pred_norm[:, 0:2] * (V_max - V_min) + V_min
-            p_pred = V_p_pred_norm[:, 0] * (p_max - p_min) + p_min
-            result = [V_p_star, V_pred, p_pred, loss_acc_list, epoch]
+            V_p_pred_norm = distrib_model(X_in)
+            u_norm, v_norm, p_norm = denormalize(V_p_pred_norm, u_min, u_max, v_min, v_max, p_min, p_max)
+            result = [V_p_star, u_pred,v_pred, p_pred, loss_acc_list, epoch]
             f = open('result_Taylor_green_vortex.pkl', 'wb')
             pickle.dump(result, f)
             f.close()
@@ -646,15 +670,14 @@ def main():
         print(f'TIMER: total testing time: {time.time() - et} s')
 
 
-    V_p_pred_norm = model.forward(X_in)
-    V_pred = V_p_pred_norm[:, 0:2] * (V_max - V_min) + V_min
-    p_pred = V_p_pred_norm[:, 0] * (p_max - p_min) + p_min
+    V_p_pred_norm = distrib_model(X_in)
+    u_norm, v_norm, p_norm = denormalize(V_p_pred_norm, u_min, u_max, v_min, v_max, p_min, p_max)
 
     if grank==0:
         f_time = time.time() - st
         print(f'TIMER: final time: {f_time} s')
 
-    result = [V_p_star, V_pred, p_pred, loss_acc_list, acc_test, f_time]
+    result = [V_p_star, u_pred, v_pred, p_pred, loss_acc_list, acc_test, f_time]
     f = open('result_Taylot_green_vortex.pkl', 'wb')
     pickle.dump(result, f)
     f.close()
