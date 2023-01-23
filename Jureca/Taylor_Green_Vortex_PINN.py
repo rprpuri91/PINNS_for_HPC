@@ -161,24 +161,12 @@ def h5_loader(path):
         print(V_p_train_top.shape)
         print(V_p_train_bottom.shape)'''
 
-<<<<<<< HEAD:Taylor_Green_Vortex_PINN.py
+
         X_train = np.vstack([X_train_domain, X_train_left, X_train_right, X_train_top, X_train_bottom])
         X_test = np.vstack([X_test_domain, X_test_left, X_test_right, X_test_top, X_test_bottom])
         V_p_train = np.vstack([V_p_train_domain, V_p_train_left, V_p_train_right, V_p_train_top,V_p_train_bottom])
         V_p_test = np.vstack([V_p_test_domain, V_p_test_left, V_p_test_right, V_p_test_top, V_p_test_bottom])
-<<<<<<< HEAD:deep/Taylor_Green_Vortex_PINN_no_Dom.py
-    
-        h5.close()
-=======
-        X_train = np.vstack([X_train_left, X_train_right, X_train_top, X_train_bottom])
-        X_test = np.vstack([X_test_left, X_test_right, X_test_top, X_test_bottom])
-        V_p_train = np.vstack([V_p_train_left, V_p_train_right, V_p_train_top,V_p_train_bottom])
-        V_p_test = np.vstack([V_p_test_left, V_p_test_right, V_p_test_top, V_p_test_bottom])
 
->>>>>>> 33b31cba18c586e398250e65b2d79b55c42e3b65:deep/Taylor_Green_Vortex_PINN_no_Dom.py
-=======
-        #print('shape',V_p_train.shape)
->>>>>>> Jureca:Jureca/Taylor_Green_Vortex_PINN.py
     except Exception as e:
         print(e)
 
@@ -429,15 +417,8 @@ def total_loss(model, data, device, rho, nu):
     loss_ns2 = loss_function(ns2, target3)
 
     loss_variable = loss_function(predictions, exact)
-<<<<<<< HEAD:deep/Taylor_Green_Vortex_PINN_no_Dom.py
 
     return loss_continuity + loss_ns1 + loss_ns2 + loss_variable
-=======
-
-    return loss_continuity + loss_ns1 + loss_ns2 + loss_variable
-
->>>>>>> Jureca:Jureca/Taylor_Green_Vortex_PINN.py
-
 
 def main():
 
@@ -658,18 +639,7 @@ def main():
         # if a better state is found
         is_best = loss_acc < best_acc
         if epoch % args.restart_int == 0 and not args.benchrun:
-<<<<<<< HEAD:deep/Taylor_Green_Vortex_PINN_no_Dom.py
-            #save_state(epoch, model, loss_acc, optimizer, res_name, grank, gwsize, is_best)
-            save_state(epoch, model, loss_acc, optimizer, res_name)
-            V_p_pred_norm = model.forward(X_in)
-            V_pred, p_pred = preprocessing.denormalize(V_p_pred_norm[:,0:2],V_p_pred_norm[:,2] )
-            result = [V_p_star,V_p_pred_norm, V_pred,p_pred, loss_acc_list, epoch]
-<<<<<<< HEAD:Taylor_Green_Vortex_PINN.py
-            f = open('result_Taylor_green_vortex.pkl', 'wb')
-=======
-            f = open('result_Taylor_green_vortex_no_Dom.pkl', 'wb')
->>>>>>> 33b31cba18c586e398250e65b2d79b55c42e3b65:deep/Taylor_Green_Vortex_PINN_no_Dom.py
-=======
+
             save_state(epoch, model, loss_acc, optimizer, res_name, grank, gwsize, is_best)
             #save_state(epoch, model, loss_acc, optimizer, res_name)
             best_acc = min(loss_acc, best_acc)
@@ -677,7 +647,6 @@ def main():
             u_norm, v_norm, p_norm = denormalize(V_p_pred_norm, u_min, u_max, v_min, v_max, p_min, p_max)
             result = [V_p_star, u_pred,v_pred, p_pred, loss_acc_list, epoch]
             f = open('result_Taylor_green_vortex.pkl', 'wb')
->>>>>>> Jureca:Jureca/Taylor_Green_Vortex_PINN.py
             pickle.dump(result, f)
             f.close()
 
@@ -708,13 +677,9 @@ def main():
         f_time = time.time() - st
         print(f'TIMER: final time: {f_time} s')
 
-<<<<<<< HEAD:deep/Taylor_Green_Vortex_PINN_no_Dom.py
-    result = [V_p_star, V_pred, p_pred, loss_acc_list, test_loss_acc, f_time]
-    f = open('result_Taylor_green_vortex.pkl', 'wb')
-=======
     result = [V_p_star, u_pred, v_pred, p_pred, loss_acc_list, acc_test, f_time]
     f = open('result_Taylot_green_vortex.pkl', 'wb')
->>>>>>> Jureca:Jureca/Taylor_Green_Vortex_PINN.py
+
     pickle.dump(result, f)
     f.close()
 
