@@ -105,7 +105,7 @@ def scaling(X):
     return x
 
 def h5_loader(path):
-    h5 = h5py.File(path, 'r')
+    h5 = h5py.File('./data/data_Taylor_Green_Vortex.h5', 'r')
 
     try:
         domain = h5.get('domain')
@@ -223,7 +223,7 @@ def test(model, device, test_loader, grank, gwsize, rho, nu):
 
     return test_loss_acc
 
-def denormalize(self, V_p_norm, u_min, u_max, v_min, v_max, p_min, p_max):
+def denormalize(V_p_norm, u_min, u_max, v_min, v_max, p_min, p_max):
     u_norm = V_p_norm[:,0]
     v_norm = V_p_norm[:,1]
     p_norm = V_p_norm[:,2]
@@ -350,7 +350,8 @@ def total_loss(model, data, device, rho, nu):
     g = inputs.clone()
     g.requires_grad = True
 
-    global d_model = model
+    global d_model
+    d_model = model
 
     exact = data[1]
 
@@ -569,7 +570,7 @@ def main():
     # resume state
     start_epoch = 1
     best_acc = np.Inf
-    res_name = 'checkpoint_no_Dom.pth.tar'
+    res_name = 'checkpoint.pth.tar'
     if os.path.isfile(res_name) and not args.benchrun:
         try:
             dist.barrier()
@@ -644,9 +645,9 @@ def main():
             #save_state(epoch, model, loss_acc, optimizer, res_name)
             best_acc = min(loss_acc, best_acc)
             V_p_pred_norm = distrib_model(X_in)
-            u_norm, v_norm, p_norm = denormalize(V_p_pred_norm, u_min, u_max, v_min, v_max, p_min, p_max)
+            u_pred, v_pred, p_pred = denormalize(V_p_pred_norm, u_min, u_max, v_min, v_max, p_min, p_max)
             result = [V_p_star, u_pred,v_pred, p_pred, loss_acc_list, epoch]
-            f = open('result_Taylor_green_vortex.pkl', 'wb')
+            f = open('./result/result_Taylor_green_vortex.pkl', 'wb')
             pickle.dump(result, f)
             f.close()
 
@@ -671,14 +672,14 @@ def main():
 
 
     V_p_pred_norm = distrib_model(X_in)
-    u_norm, v_norm, p_norm = denormalize(V_p_pred_norm, u_min, u_max, v_min, v_max, p_min, p_max)
+    u_pred, v_pred, p_pred = denormalize(V_p_pred_norm, u_min, u_max, v_min, v_max, p_min, p_max)
 
     if grank==0:
         f_time = time.time() - st
         print(f'TIMER: final time: {f_time} s')
 
     result = [V_p_star, u_pred, v_pred, p_pred, loss_acc_list, acc_test, f_time]
-    f = open('result_Taylot_green_vortex.pkl', 'wb')
+    f = open('./result/result_Taylot_green_vortex.pkl', 'wb')
 
     pickle.dump(result, f)
     f.close()
