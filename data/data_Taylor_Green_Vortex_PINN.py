@@ -18,9 +18,9 @@ class Preprocessing_Taylor_Green():
         self.nu = nu
         self.n = n
 
-        x_values = np.arange(0, np.pi, 0.1).tolist()
-        y_values = np.arange(0, np.pi, 0.1).tolist()
-        t = np.arange(0, 1, 0.01)
+        x_values = np.arange(0, np.pi, 0.2).tolist()
+        y_values = np.arange(0, np.pi, 0.2).tolist()
+        t = np.arange(0, 1, 0.02)
         x_values.append(np.pi)
         y_values.append(np.pi)
 
@@ -149,7 +149,7 @@ class Preprocessing_Taylor_Green():
         print(X_train_domain.shape)
         print(X_test_domain.shape)
 
-        h5 = h5py.File('data_Taylor_Green_Vortex.h5', 'w')
+        h5 = h5py.File('data_Taylor_Green_Vortex_reduced.h5', 'w')
         g1 = h5.create_group('domain')
         g1.create_dataset('data1', data=X_train_domain)
         g1.create_dataset('data2', data=V_p_train_domain)

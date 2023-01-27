@@ -555,13 +555,20 @@ def main():
 
     layers = np.array([3, 60, 60, 60, 60, 60, 3])
     model = Taylor_green_vortex_PINN(layers).to(device)
-    
-    # distribute model tpo workers
+   
+    print(device)
+    # distribute model too workers
     if args.cuda:
         distrib_model = torch.nn.parallel.DistributedDataParallel(model,\
-                        device_ids = [device], output_device=device, find_unused_parameters = True)
+                        device_ids = [device], output_device=device, find_unused_parameters = False)
     else:
-        distrib_model = torch.nn.parallel.DistributedDataParallel(model, find_unused_parameters = True)
+        distrib_model = torch.nn.parallel.DistributedDataParallel(model, find_unused_parameters = False)
+
+    '''if args.cuda:
+        distrib_model = nn.parallel.DistributedDataParallel(model,\
+            device_ids=[device], output_device=device)
+    else:
+        distrib_model = nn.parallel.DistributedDataParallel(model)'''
 
     # optimizer
     optimizer = torch.optim.SGD(distrib_model.parameters(), lr=args.lr)

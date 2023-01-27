@@ -5,16 +5,17 @@
 #SBATCH --account=raise-ctp2
 #SBATCH --mail-user=
 #SBATCH --mail-type=ALL
-#SBATCH --time=10:00:00
+#SBATCH --time=01:00:00
 #SBATCH --output=gpu.out
 #SBATCH --error=gpu.err
 
 # configure node and process count on the CM
-#SBATCH --partition=dc-gpu
-#SBATCH --nodes=4
+#SBATCH --partition=dc-gpu-devel
+#SBATCH --nodes=1
+#SBATCH --ntasks=4
 #SBATCH --cpus-per-task=16
+#SBATCH --ntasks-per-node=4
 #SBATCH --gpus-per-node=4
-#SBATCH --exclusive
 
 # gres options have to be disabled for deepv
 #SBATCH --gres=gpu:4
@@ -33,7 +34,7 @@ export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
 
 
 COMMAND="./Jureca/Taylor_Green_Vortex_PINN.py"
-EXEC="torchrun --standalone $COMMAND"
+EXEC="torchrun --nproc_per_node=$SLURM_GPUS_PER_NODE $COMMAND"
 
 #COMMAND1="./Jureca/Taylor_Green_Vortex_PINN_noDom.py"
 #EXEC1="torchrun --standalone --nnodes=1 --nproc_per_node=1 $COMMAND1"
@@ -44,7 +45,7 @@ EXEC="torchrun --standalone $COMMAND"
 #COMMAND3="./Jureca/Taylor_Green_Vortex_PINN_noDom_reduced.py"
 #EXEC3="torchrun --standalone --nnodes=1 --nproc_per_node=1 $COMMAND3"
 
-srun --exclusive --nodes=4 --ntasks=1 --gres=gpu:4 $EXEC > test_0.out &
+srun --nodes=1 --gres=gpu:4 $EXEC > test_0.out &
 #srun --exclusive --nodes=1 --ntasks=1 --gres=gpu:1 $EXEC1 > test_1.out &
 #srun --exclusive --nodes=1 --ntasks=1 --gres=gpu:1 $EXEC2 > test_2.out &
 #srun --exclusive --nodes=1 --ntasks=1 --gres=gpu:1 $EXEC3 > test_3.out &
