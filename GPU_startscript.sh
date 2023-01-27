@@ -12,10 +12,10 @@
 # configure node and process count on the CM
 #SBATCH --partition=dc-gpu-devel
 #SBATCH --nodes=1
-#SBATCH --ntasks=4
-#SBATCH --cpus-per-task=16
-#SBATCH --ntasks-per-node=4
+#SBATCH --cpus-per-task=32
+#SBATCH --ntasks-per-node=1
 #SBATCH --gpus-per-node=4
+#SBATCH --exclusive
 
 # gres options have to be disabled for deepv
 #SBATCH --gres=gpu:4
