@@ -5,20 +5,20 @@
 #SBATCH --account=raise-ctp2
 #SBATCH --mail-user=
 #SBATCH --mail-type=ALL
-#SBATCH --time=01:00:00
-#SBATCH --output=gpu.out
-#SBATCH --error=gpu.err
+#SBATCH --time=12:00:00
+#SBATCH --output=gpu_red.out
+#SBATCH --error=gpu_red.err
 
 # configure node and process count on the CM
-#SBATCH --partition=dc-gpu-devel
+#SBATCH --partition=dc-gpu
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=32
 #SBATCH --ntasks-per-node=1
-#SBATCH --gpus-per-node=4
+#SBATCH --gpus-per-node=1
 #SBATCH --exclusive
 
 # gres options have to be disabled for deepv
-#SBATCH --gres=gpu:4
+#SBATCH --gres=gpu:1
 
 # set modules
 ml --force purge
@@ -33,21 +33,21 @@ export CUDA_VISIBLE_DEVICES="0,1,2,3"
 export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
 
 
-COMMAND="./Jureca/Taylor_Green_Vortex_PINN.py"
-EXEC="torchrun --nproc_per_node=$SLURM_GPUS_PER_NODE $COMMAND"
+#COMMAND="./Jureca/Taylor_Green_Vortex_PINN.py"
+#EXEC="torchrun --nproc_per_node=$SLURM_GPUS_PER_NODE $COMMAND"
 
 #COMMAND1="./Jureca/Taylor_Green_Vortex_PINN_noDom.py"
 #EXEC1="torchrun --standalone --nnodes=1 --nproc_per_node=1 $COMMAND1"
 
-#COMMAND2="./Jureca/Taylor_Green_Vortex_PINN_reduced.py"
-#EXEC2="torchrun --standalone --nnodes=1 --nproc_per_node=1 $COMMAND2"
+COMMAND="./Jureca/Taylor_Green_Vortex_PINN_reduced.py"
+EXEC="torchrun --nproc_per_node=$SLURM_GPUS_PER_NODE $COMMAND"
 
 #COMMAND3="./Jureca/Taylor_Green_Vortex_PINN_noDom_reduced.py"
 #EXEC3="torchrun --standalone --nnodes=1 --nproc_per_node=1 $COMMAND3"
 
-srun --nodes=1 --gres=gpu:4 $EXEC > test_0.out &
+#srun --nodes=1 --gres=gpu:1 $EXEC > test_0.out &
 #srun --exclusive --nodes=1 --ntasks=1 --gres=gpu:1 $EXEC1 > test_1.out &
-#srun --exclusive --nodes=1 --ntasks=1 --gres=gpu:1 $EXEC2 > test_2.out &
+srun --nodes=1 --gres=gpu:1 $EXEC > test_2.out &
 #srun --exclusive --nodes=1 --ntasks=1 --gres=gpu:1 $EXEC3 > test_3.out &
 wait
 

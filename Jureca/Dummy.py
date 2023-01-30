@@ -105,7 +105,7 @@ def scaling(X):
     return x
 
 def h5_loader(path):
-    h5 = h5py.File('./data/data_Taylor_Green_Vortex.h5', 'r')
+    h5 = h5py.File('./data/data_Taylor_Green_Vortex_reduced.h5', 'r')
 
     try:
         domain = h5.get('domain')
@@ -172,21 +172,19 @@ def h5_loader(path):
 
     return X_train, V_p_train, X_test, V_p_test, X_in, V_p_star
 
-def train(model, device , train_loader, optimizer, epoch,grank, gwsize, rho, nu):
-    model.train()
-    t_list = []
-    loss_acc = 0
-    if grank==0:
-        print("\n")
-    count = 0
-    for batch_idx, (data) in enumerate(train_loader):
-        t = time.perf_counter()
-        if count % 1000 == 0:
-            print('Batch: ', count)
-        optimizer.zero_grad()
-        # predictions = distrib_model(inputs)
+class RandomDataset(Dataset):
 
-        loss = total_loss(model, data, device, rho, nu)
+    def __init__(self, size, length):
+        self.len = length
+        self.data = torch.randn(length, size)
+
+    def __getitem__(self,index):
+        return self.data[index]
+
+    def __len__(self):
+        return self.len
+
+     loss = total_loss(model, data, device, rho, nu)
 
         loss.backward()
         optimizer.step()
@@ -251,9 +249,9 @@ def save_state(epoch,distrib_model,loss_acc,optimizer,res_name, grank, gwsize, i
              'optimizer' : optimizer.state_dict()}
 
         # write on worker with is_best
-    if grank == is_best_rank:
-        torch.save(state,'./'+res_name)
-        print(f'DEBUG: state is saved on epoch:{epoch} in {time.time()-rt} s')
+    #if grank == is_best_rank:
+    torch.save(state,'./'+res_name)
+    print(f'DEBUG: state is saved on epoch:{epoch} in {time.time()-rt} s')
 
 # deterministic dataloader
 def seed_worker(worker_id):
@@ -344,7 +342,7 @@ def pred_hessian_v(x,y,t):
 def total_loss(model, data, device, rho, nu):
 
     loss_function = nn.MSELoss()
-    print(data)
+    #print(data)
     inputs = data[0]
 
     g = inputs.clone()
@@ -577,7 +575,7 @@ def main():
     # resume state
     start_epoch = 1
     best_acc = np.Inf
-    res_name = 'checkpoint.pth.tar'
+    res_name = 'checkpoint_red.pth.tar'
     if os.path.isfile(res_name) and not args.benchrun:
         try:
             dist.barrier()
@@ -654,7 +652,7 @@ def main():
             V_p_pred_norm = distrib_model(X_in)
             u_pred, v_pred, p_pred = denormalize(V_p_pred_norm, u_min, u_max, v_min, v_max, p_min, p_max)
             result = [V_p_star, u_pred,v_pred, p_pred, loss_acc_list, epoch]
-            f = open('./result/result_Taylor_green_vortex.pkl', 'wb')
+            f = open('./result/result_Taylor_green_vortex_reduced.pkl', 'wb')
             pickle.dump(result, f)
             f.close()
 
@@ -686,7 +684,7 @@ def main():
         print(f'TIMER: final time: {f_time} s')
 
     result = [V_p_star, u_pred, v_pred, p_pred, loss_acc_list, acc_test, f_time]
-    f = open('./result/result_Taylot_green_vortex.pkl', 'wb')
+    f = open('./result/result_Taylot_green_vortex_reduced.pkl', 'wb')
 
     pickle.dump(result, f)
     f.close()

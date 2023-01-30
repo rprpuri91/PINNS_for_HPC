@@ -18,7 +18,7 @@ def pars_ini():
 
     #IO
     parser.add_argument('--data-dir', default='./', help='location of the training dataset')
-    parser.add_argument('--restart-int', type=int, default=5, help='restart interval per epoch (default: 10)')
+    parser.add_argument('--restart-int', type=int, default=10, help='restart interval per epoch (default: 10)')
 
     #model
     parser.add_argument('--batch-size', type=int, default=16, help='input batch size for training (default: 16)')
@@ -167,7 +167,6 @@ def h5_loader(path):
         V_p_train = np.vstack([V_p_train_domain, V_p_train_left, V_p_train_right, V_p_train_top,V_p_train_bottom])
         V_p_test = np.vstack([V_p_test_domain, V_p_test_left, V_p_test_right, V_p_test_top, V_p_test_bottom])
 
-        print(X_train.shape)
     except Exception as e:
         print(e)
 
@@ -180,11 +179,10 @@ def train(model, device , train_loader, optimizer, epoch,grank, gwsize, rho, nu)
     if grank==0:
         print("\n")
     count = 0
-    for batch_idx , (data) in train_loader:
+    for batch_idx, (data) in enumerate(train_loader):
         t = time.perf_counter()
         if count % 1000 == 0:
-             print('Batch: ', count)
-
+            print('Batch: ', count)
         optimizer.zero_grad()
         # predictions = distrib_model(inputs)
 
@@ -195,7 +193,6 @@ def train(model, device , train_loader, optimizer, epoch,grank, gwsize, rho, nu)
         if batch_idx % args.log_int == 0 and grank==0:
             print(f'Train epoch: {epoch} [{batch_idx * len(data)}/{len(train_loader.dataset)/gwsize}'
                   f'({100.0 * batch_idx / len(train_loader):.0f}%)]\t\tLoss: {loss.item():.6f}')
-        
         t_list.append(time.perf_counter() - t)
         loss_acc += loss.item()
 
@@ -254,9 +251,9 @@ def save_state(epoch,distrib_model,loss_acc,optimizer,res_name, grank, gwsize, i
              'optimizer' : optimizer.state_dict()}
 
         # write on worker with is_best
-    if grank == is_best_rank:
-        torch.save(state,'./'+res_name)
-        print(f'DEBUG: state is saved on epoch:{epoch} in {time.time()-rt} s')
+    #if grank == is_best_rank:
+    torch.save(state,'./'+res_name)
+    print(f'DEBUG: state is saved on epoch:{epoch} in {time.time()-rt} s')
 
 # deterministic dataloader
 def seed_worker(worker_id):
@@ -347,7 +344,7 @@ def pred_hessian_v(x,y,t):
 def total_loss(model, data, device, rho, nu):
 
     loss_function = nn.MSELoss()
-
+    #print(data)
     inputs = data[0]
 
     g = inputs.clone()
@@ -580,7 +577,7 @@ def main():
     # resume state
     start_epoch = 1
     best_acc = np.Inf
-    res_name = 'checkpoint_reduced.pth.tar'
+    res_name = 'checkpoint_red.pth.tar'
     if os.path.isfile(res_name) and not args.benchrun:
         try:
             dist.barrier()
