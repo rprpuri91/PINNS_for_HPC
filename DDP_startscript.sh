@@ -14,21 +14,21 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=32
-#SBATCH --gpus-per-node=1
+#SBATCH --gpus-per-node=4
 #SBATCH --exclusive
 
 # gres options have to be disabled for deepv
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:4
 
 # parameters
 debug=false # do debug
 bs=32       # batch-size
-epochs=100    # epochs
+epochs=200    # epochs
 lr=0.01     # learning rate
 
 # AT
 #dataDir="/p/scratch/raise-ctp2/T31_LD/"
-COMMAND="./Jureca/Taylor_Green_Vortex_PINN_reduced.py"
+COMMAND="./Jureca/Taylor_Green_Vortex_PINN.py"
 EXEC="$COMMAND \
   --batch-size $bs \
   --epochs $epochs \

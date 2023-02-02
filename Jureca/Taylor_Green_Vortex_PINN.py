@@ -9,7 +9,7 @@ import torch.distributed as dist
 import torch.nn.functional as F
 import torch.optim as optim
 import pickle
-
+from torch.utils.data import Dataset, DataLoader
 
 def pars_ini():
     global args
@@ -22,7 +22,7 @@ def pars_ini():
 
     #model
     parser.add_argument('--batch-size', type=int, default=16, help='input batch size for training (default: 16)')
-    parser.add_argument('--epochs', type=int, default=1000, help='number of training epochs (default: 10)')
+    parser.add_argument('--epochs', type=int, default=72, help='number of training epochs (default: 10)')
     parser.add_argument('--lr', type=float, default=0.001, help='learning rate (default: 0.001)')
     parser.add_argument('--wdecay', type=float, default=0.003, help='weight decay in ADAM (default: 0.003)')
     parser.add_argument('--gamma', type=float, default=0.95,
@@ -94,6 +94,8 @@ class Taylor_green_vortex_PINN(nn.Module):
 
         a = self.linears[-1](a)
 
+        #print("\tIn Model: input size", X.size(), "output size", a.size())
+
         return a
 
 def scaling(X):
@@ -104,7 +106,7 @@ def scaling(X):
 
     return x
 
-def h5_loader(path):
+def h5_loader():
     h5 = h5py.File('./data/data_Taylor_Green_Vortex.h5', 'r')
 
     try:
@@ -172,6 +174,38 @@ def h5_loader(path):
 
     return X_train, V_p_train, X_test, V_p_test, X_in, V_p_star
 
+class GenerateDataset(Dataset):
+
+    def __init__(self, list_id):
+        self.X_train, self.V_p_train, _, _ , _, _ = h5_loader()
+        self.len = len(self.X_train)
+
+    def __getitem__(self,index):
+        X = self.X_train[index]
+        V_p = self.V_p_train[index]
+        data_np = np.array([X,V_p])
+        data = torch.from_numpy(data_np).float()
+        return data
+
+    def __len__(self):
+        return self.len    
+
+class TestDataset(Dataset):
+
+    def __init__(self, list_id):
+        _,_, self.X_test, self.V_p_test, _, _ = h5_loader()
+        self.len = len(self.X_test)
+
+    def __getitem__(self, index):
+        X = self.X_test[index]
+        V_p = self.V_p_test[index]
+        data_np = np.array([X,V_p])
+        data = torch.from_numpy(data_np).float()
+        return data
+    
+    def __len__(self):
+        return self.len
+
 def train(model, device , train_loader, optimizer, epoch,grank, gwsize, rho, nu):
     model.train()
     t_list = []
@@ -181,11 +215,11 @@ def train(model, device , train_loader, optimizer, epoch,grank, gwsize, rho, nu)
     count = 0
     for batch_idx, (data) in enumerate(train_loader):
         t = time.perf_counter()
-        if count % 1000 == 0:
-            print('Batch: ', count)
+        if count % 1000 == 0 and grank==0:
+           print('Batch: ', count)
         optimizer.zero_grad()
         # predictions = distrib_model(inputs)
-
+        #with torch.cuda.amp.autocast():
         loss = total_loss(model, data, device, rho, nu)
 
         loss.backward()
@@ -244,16 +278,16 @@ def save_state(epoch,distrib_model,loss_acc,optimizer,res_name, grank, gwsize, i
         # find which rank is_best happened - select first rank if multiple
         is_best_rank = np.where(np.array(is_best_m)==True)[0][0]
 
-    # collect state
-    state = {'epoch': epoch + 1,
-             'state_dict': distrib_model.state_dict(),
-             'best_acc': loss_acc,
-             'optimizer' : optimizer.state_dict()}
+        # collect state
+        state = {'epoch': epoch + 1,
+                'state_dict': distrib_model.state_dict(),
+                'best_acc': loss_acc,
+                'optimizer' : optimizer.state_dict()}
 
         # write on worker with is_best
-    if grank == is_best_rank:
-        torch.save(state,'./'+res_name)
-        print(f'DEBUG: state is saved on epoch:{epoch} in {time.time()-rt} s')
+        if grank == is_best_rank:
+            torch.save(state,'./'+res_name)
+            print(f'DEBUG: state is saved on epoch:{epoch} in {time.time()-rt} s')
 
 # deterministic dataloader
 def seed_worker(worker_id):
@@ -328,32 +362,32 @@ def par_allgather_obj(obj,gwsize):
 
 def prediction(x,y,t):
     g = torch.cat((x, y, t), dim=1)
-    predictions = d_model(g)
+    predictions = output
     return predictions
 
 def pred_hessian_u(x,y,t):
     g = torch.cat((x, y, t), dim=1)
-    predictions = d_model(g)
-    return predictions[:,0].sum()
+    predictions = output[:,0]
+    return predictions.sum()
 
 def pred_hessian_v(x,y,t):
     g = torch.cat((x, y, t), dim=1)
-    predictions = d_model(g)
-    return predictions[:,1].sum()
+    predictions = output[:,1]
+    return predictions.sum()
 
 def total_loss(model, data, device, rho, nu):
 
     loss_function = nn.MSELoss()
-    print(data)
-    inputs = data[0]
+    #print(data)
+    inputs = data[0].to(device)
 
     g = inputs.clone()
     g.requires_grad = True
 
-    global d_model
-    d_model = model
+    global output
+    output = model(g)
 
-    exact = data[1]
+    exact = data[1].to(device)
 
     v1 = torch.zeros_like(inputs, device = device)
     v2 = torch.zeros_like(inputs, device = device)
@@ -419,6 +453,8 @@ def total_loss(model, data, device, rho, nu):
 
     loss_variable = loss_function(predictions, exact)
 
+    #print("\tOutside: input size", inputs.size(), "output size", output.size())
+
     return loss_continuity + loss_ns1 + loss_ns2 + loss_variable
 
 def main():
@@ -431,6 +467,8 @@ def main():
 
     # get directory
     program_dir = os.getcwd()
+
+    torch.backends.cudnn.benchmark = True
 
     # start time
     st = time.time()
@@ -487,11 +525,11 @@ def main():
         if args.testrun:
             torch.cuda.manual_seed(args.nseed)
 
-    X_train, V_p_train, X_test, V_p_test, X_in, V_p_star = h5_loader(args.data_dir)
+    X_train, V_p_train, X_test, V_p_test, X_in, V_p_star = h5_loader()
 
-    X_train = torch.from_numpy(X_train).float().to(device)
+    #X_train = torch.from_numpy(X_train).float().to(device)
     X_test = torch.from_numpy(X_test).float().to(device)
-    V_p_train = torch.from_numpy(V_p_train).float().to(device)
+    #V_p_train = torch.from_numpy(V_p_train).float().to(device)
     V_p_test = torch.from_numpy(V_p_test).float().to(device)
 
     u_min = V_p_star[:,0].min()
@@ -504,25 +542,22 @@ def main():
     rho = 1.2
     nu = 1.516e-5
 
-    V_min = V_p_star[:,0:2].min()
-    V_max = V_p_star[:,0:2].max()
-
-    p_min = V_p_star[:,2].min()
-    p_max = V_p_star[:,2].max()
-
-    tensors1 = [X_train,V_p_train]
+    #tensors1 = [X_train,V_p_train]
     tensors2 = [X_test,V_p_test]
     # create dataset
-    train_dataset = torch.utils.data.TensorDataset(*tensors1)
+    #train_dataset = torch.utils.data.TensorDataset(*tensors1)
     test_dataset = torch.utils.data.TensorDataset(*tensors2)
     X_in = torch.from_numpy(X_in).float().to(device)
 
+    train_len = len(X_train)
+    test_len = len(X_test)
+
     # restricts data loading to a subset of the dataset exclusive to the current process
     args.shuff = args.shuff and not args.testrun
-    train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset,
-                            num_replicas=gwsize, rank=grank, shuffle=args.shuff)
-    test_sampler = torch.utils.data.distributed.DistributedSampler(test_dataset,
-                            num_replicas=gwsize, rank=grank, shuffle=args.shuff)
+    train_sampler = torch.utils.data.distributed.DistributedSampler(dataset = GenerateDataset([x for x in range(train_len)]),
+                            num_replicas=gwsize, rank=grank, shuffle=True)
+    test_sampler = torch.utils.data.distributed.DistributedSampler(dataset = TestDataset([x for x in range(test_len)]),
+                            num_replicas=gwsize, rank=grank, shuffle=True)
 
     # distribute dataset to workers
     # persistent workers
@@ -531,12 +566,12 @@ def main():
     # deterministic testrun - the same dataset each run
     kwargs = {'worker_init_fn': seed_worker, 'generator': g} if args.testrun else {}
 
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size,
-                                               sampler=train_sampler,
+    train_loader = torch.utils.data.DataLoader(dataset = GenerateDataset([x for x in range(train_len)]), batch_size=args.batch_size,
+                                               shuffle=True,
                                                num_workers=args.nworker, pin_memory=False,
                                                persistent_workers=pers_w, drop_last=True,
                                                prefetch_factor=args.prefetch, **kwargs)
-    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=2, sampler=test_sampler,
+    test_loader = torch.utils.data.DataLoader(dataset = TestDataset([x for x in range(test_len)]), batch_size=2, shuffle=True,
                                               num_workers=args.nworker, pin_memory=False,
                                               persistent_workers=pers_w, drop_last=True,
                                               prefetch_factor=args.prefetch, **kwargs)
