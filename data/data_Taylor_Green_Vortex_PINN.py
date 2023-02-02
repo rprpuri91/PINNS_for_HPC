@@ -129,6 +129,7 @@ class Preprocessing_Taylor_Green():
         V_p_train = np.vstack([u_train_norm, v_train_norm, p_train_norm])
         V_p_test = np.vstack([u_test_norm, v_test_norm, p_test_norm])
 
+
         return V_p_train.T, X_train, V_p_test.T, X_test
 
     def data_generation(self):
@@ -138,53 +139,63 @@ class Preprocessing_Taylor_Green():
         idx = np.random.choice(self.X_in.shape[0], N2, replace=False)
         X_domain = self.X_in[idx, :]
 
+
         V_p_train_domain, X_train_domain, V_p_test_domain, X_test_domain = self.train_test(X_domain)
         V_p_train_left, X_train_left, V_p_test_left, X_test_left = self.train_test(self.X_left)
         V_p_train_right, X_train_right, V_p_test_right, X_test_right = self.train_test(self.X_right)
         V_p_train_top, X_train_top, V_p_test_top, X_test_top = self.train_test(self.X_top)
         V_p_train_bottom, X_train_bottom, V_p_test_bottom, X_test_bottom = self.train_test(self.X_bottom)
 
-        print(V_p_train_domain.shape)
-        print(V_p_test_domain.shape)
-        print(X_train_domain.shape)
-        print(X_test_domain.shape)
+        Domain_train = np.hstack([X_train_domain,V_p_train_domain])
+        Domain_test = np.hstack([X_test_domain, V_p_test_domain])
+
+        Left_train = np.hstack([X_train_left, V_p_train_left])
+        Left_test = np.hstack([X_test_left, V_p_test_left])
+
+        Right_train = np.hstack([X_train_right, V_p_train_right])
+        Right_test = np.hstack([X_test_right, V_p_test_right])
+
+        Top_train = np.hstack([X_train_top, V_p_train_top])
+        Top_test = np.hstack([X_test_top, V_p_test_top])
+
+        Bottom_train = np.hstack([X_train_bottom, V_p_train_bottom])
+        Bottom_test = np.hstack([X_test_bottom, V_p_test_bottom])
+
+        V_p_star = np.vstack([self.u_star, self.v_star, self.p_star])
+
+
+        '''for i in range(len(X_train_domain)):
+            print(X_train_domain[i], V_p_train_domain[i])'''
+
+        #print(X_train_domain, V_p_train_domain)
+        '''print(V_p_test_domain.shape)
+        print(X_train_domain)
+        print(X_test_domain.shape)'''
 
         h5 = h5py.File('data_Taylor_Green_Vortex_reduced.h5', 'w')
         g1 = h5.create_group('domain')
-        g1.create_dataset('data1', data=X_train_domain)
-        g1.create_dataset('data2', data=V_p_train_domain)
-        g1.create_dataset('data3', data=X_test_domain)
-        g1.create_dataset('data4', data=V_p_test_domain)
+        g1.create_dataset('data1', data=Domain_train)
+        g1.create_dataset('data2', data=Domain_test)
 
         g2 = h5.create_group('left')
-        g2.create_dataset('data1', data=X_train_left)
-        g2.create_dataset('data2', data=V_p_train_left)
-        g2.create_dataset('data3', data=X_test_left)
-        g2.create_dataset('data4', data=V_p_test_left)
+        g2.create_dataset('data1', data=Left_train)
+        g2.create_dataset('data2', data=Left_test)
 
         g3 = h5.create_group('right')
-        g3.create_dataset('data1', data=X_train_right)
-        g3.create_dataset('data2', data=V_p_train_right)
-        g3.create_dataset('data3', data=X_test_right)
-        g3.create_dataset('data4', data=V_p_test_right)
+        g3.create_dataset('data1', data=Right_train)
+        g3.create_dataset('data2', data=Right_test)
 
         g4 = h5.create_group('top')
-        g4.create_dataset('data1', data=X_train_top)
-        g4.create_dataset('data2', data=V_p_train_top)
-        g4.create_dataset('data3', data=X_test_top)
-        g4.create_dataset('data4', data=V_p_test_top)
+        g4.create_dataset('data1', data=Top_train)
+        g4.create_dataset('data2', data=Top_test)
 
         g5 = h5.create_group('bottom')
-        g5.create_dataset('data1', data=X_train_bottom)
-        g5.create_dataset('data2', data=V_p_train_bottom)
-        g5.create_dataset('data3', data=X_test_bottom)
-        g5.create_dataset('data4', data=V_p_test_bottom)
+        g5.create_dataset('data1', data=Bottom_train)
+        g5.create_dataset('data2', data=Bottom_test)
 
         g6 = h5.create_group('full')
         g6.create_dataset('data1', data=self.X_in)
-        g6.create_dataset('data2', data=self.u_star)
-        g6.create_dataset('data3', data=self.v_star)
-        g6.create_dataset('data4', data=self.p_star)
+        g6.create_dataset('data2', data=V_p_star.T)
 
         h5.close()
 
