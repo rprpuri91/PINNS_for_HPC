@@ -16,9 +16,9 @@ class Preprocessing_Taylor_Green():
         self.nu = nu
         self.n = n
 
-        x_values = np.arange(0, np.pi, 0.5).tolist()
-        y_values = np.arange(0, np.pi, 0.5).tolist()
-        t = np.arange(0, 1, 0.1)
+        x_values = np.arange(0, np.pi, 0.1).tolist()
+        y_values = np.arange(0, np.pi, 0.1).tolist()
+        t = np.arange(0, 1, 0.01)
         x_values.append(np.pi)
         y_values.append(np.pi)
 
@@ -184,14 +184,16 @@ class Preprocessing_Taylor_Green():
         V_p_star = np.vstack([self.u_star, self.v_star, self.p_star])
         V_p_center = np.vstack([self.u_center, self.v_center, self.p_center])
 
-        print(X_in1)
+        center_data = np.hstack([self.X_center, V_p_center.T])
+
+        print(center_data.shape)
 
         #print(X_train_domain, V_p_train_domain)
         '''print(V_p_test_domain.shape)
         print(X_train_domain)
         print(X_test_domain.shape)'''
 
-        h5 = h5py.File('data_Taylor_Green_Vortex_reduced.h5', 'w')
+        h5 = h5py.File('data_Taylor_Green_Vortex.h5', 'w')
         g1 = h5.create_group('domain')
         g1.create_dataset('data1', data=domain_train)
         g1.create_dataset('data2', data=domain_test)
@@ -217,8 +219,7 @@ class Preprocessing_Taylor_Green():
         g6.create_dataset('data2', data=initial_test)
 
         g7 = h5.create_group('center')
-        g7.create_dataset('data1', data=self.X_center)
-        g7.create_dataset('data2', data=V_p_center.T)
+        g7.create_dataset('data1', data=center_data)
 
         g8 = h5.create_group('full')
         g8.create_dataset('data1', data=self.X_in)
