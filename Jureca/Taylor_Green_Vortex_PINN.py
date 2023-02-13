@@ -118,38 +118,29 @@ def h5_loader():
         full = h5.get('full')
 
 
-        X_train_domain = np.array(domain.get('data1'))
-        V_p_train_domain = np.array(domain.get('data2'))
-        X_test_domain = np.array(domain.get('data3'))
-        V_p_test_domain = np.array(domain.get('data4'))
+        train_domain = np.array(domain.get('data1'))
+        test_domain = np.array(domain.get('data2'))
 
-        X_train_left = np.array(left.get('data1'))
-        V_p_train_left = np.array(left.get('data2'))
-        X_test_left = np.array(left.get('data3'))
-        V_p_test_left = np.array(left.get('data4'))
+        train_left = np.array(left.get('data1'))
+        test_left = np.array(left.get('data2'))
 
-        X_train_right = np.array(right.get('data1'))
-        V_p_train_right = np.array(right.get('data2'))
-        X_test_right = np.array(right.get('data3'))
-        V_p_test_right = np.array(right.get('data4'))
+        train_right = np.array(right.get('data1'))
+        test_right = np.array(right.get('data2'))
 
-        X_train_top = np.array(top.get('data1'))
-        V_p_train_top = np.array(top.get('data2'))
-        X_test_top = np.array(top.get('data3'))
-        V_p_test_top = np.array(top.get('data4'))
+        train_top = np.array(top.get('data1'))
+        test_top = np.array(top.get('data2'))
 
-        X_train_bottom = np.array(bottom.get('data1'))
-        V_p_train_bottom = np.array(bottom.get('data2'))
-        X_test_bottom = np.array(bottom.get('data3'))
-        V_p_test_bottom = np.array(bottom.get('data4'))
+        train_bottom = np.array(bottom.get('data1'))
+        test_bottom = np.array(bottom.get('data2'))
+
+        train_initial = np.array(initial.get('data1'))
+        test_initial = np.array(initial.get('data2'))
+
+        center_data = np.array(center.get('data1'))
 
         X_in = np.array(full.get('data1'))
-        u_star = np.array(full.get('data2'))
-        v_star = np.array(full.get('data3'))
-        p_star = np.array(full.get('data4'))
+        V_p_star = np.array(full.get('data2'))
 
-        V_p_star = np.vstack([u_star, v_star, p_star])
-        V_p_star = V_p_star.T
         #print(V_p_star)
 
         '''print(X_train_domain.shape)
@@ -164,27 +155,31 @@ def h5_loader():
         print(V_p_train_bottom.shape)'''
 
 
-        X_train = np.vstack([X_train_domain, X_train_left, X_train_right, X_train_top, X_train_bottom])
-        X_test = np.vstack([X_test_domain, X_test_left, X_test_right, X_test_top, X_test_bottom])
-        V_p_train = np.vstack([V_p_train_domain, V_p_train_left, V_p_train_right, V_p_train_top,V_p_train_bottom])
-        V_p_test = np.vstack([V_p_test_domain, V_p_test_left, V_p_test_right, V_p_test_top, V_p_test_bottom])
+        train_data = np.vstack([train_domain, train_left, train_right, train_top, train_bottom, train_initial, center_data])
+        test_data = np.vstack([test_domain, test_left, test_right, test_top, test_bottom, test_initial])
 
+        
+        '''print('########################################')
+        for i in range(len(train_data)):
+            print(train_data[i])
+            print("\n")
+
+        print('#######################################')
+        '''
     except Exception as e:
         print(e)
 
-    return X_train, V_p_train, X_test, V_p_test, X_in, V_p_star
+    return train_data, test_data, X_in, V_p_star
 
 class GenerateDataset(Dataset):
 
     def __init__(self, list_id):
-        self.X_train, self.V_p_train, _, _ , _, _ = h5_loader()
-        self.len = len(self.X_train)
+        self.train_data, _ , _, _ = h5_loader()
+        self.len = len(self.train_data)
 
     def __getitem__(self,index):
-        X = self.X_train[index]
-        V_p = self.V_p_train[index]
-        data_np = np.array([X,V_p])
-        data = torch.from_numpy(data_np).float()
+        data0 = self.train_data[index]
+        data = torch.from_numpy(data0).float()
         return data
 
     def __len__(self):
@@ -193,14 +188,12 @@ class GenerateDataset(Dataset):
 class TestDataset(Dataset):
 
     def __init__(self, list_id):
-        _,_, self.X_test, self.V_p_test, _, _ = h5_loader()
-        self.len = len(self.X_test)
+        _, self.test_data, _, _ = h5_loader()
+        self.len = len(self.test_data)
 
     def __getitem__(self, index):
-        X = self.X_test[index]
-        V_p = self.V_p_test[index]
-        data_np = np.array([X,V_p])
-        data = torch.from_numpy(data_np).float()
+        data0 = self.test_data[index]
+        data = torch.from_numpy(data0).float()
         return data
     
     def __len__(self):
@@ -379,15 +372,19 @@ def total_loss(model, data, device, rho, nu):
 
     loss_function = nn.MSELoss()
     #print(data)
-    inputs = data[0].to(device)
+    inputs = data[:,0:3].to(device)
+
+    #print('input', inputs)
+
+    exact = data[:,3:].to(device)
+
+    #print('exact', exact)
 
     g = inputs.clone()
     g.requires_grad = True
 
     global output
     output = model(g)
-
-    exact = data[1].to(device)
 
     v1 = torch.zeros_like(inputs, device = device)
     v2 = torch.zeros_like(inputs, device = device)
@@ -525,12 +522,8 @@ def main():
         if args.testrun:
             torch.cuda.manual_seed(args.nseed)
 
-    X_train, V_p_train, X_test, V_p_test, X_in, V_p_star = h5_loader()
+    train_data, test_data, X_in, V_p_star = h5_loader()
 
-    #X_train = torch.from_numpy(X_train).float().to(device)
-    X_test = torch.from_numpy(X_test).float().to(device)
-    #V_p_train = torch.from_numpy(V_p_train).float().to(device)
-    V_p_test = torch.from_numpy(V_p_test).float().to(device)
 
     u_min = V_p_star[:,0].min()
     u_max = V_p_star[:,0].max()
@@ -542,15 +535,10 @@ def main():
     rho = 1.2
     nu = 1.516e-5
 
-    #tensors1 = [X_train,V_p_train]
-    tensors2 = [X_test,V_p_test]
-    # create dataset
-    #train_dataset = torch.utils.data.TensorDataset(*tensors1)
-    test_dataset = torch.utils.data.TensorDataset(*tensors2)
     X_in = torch.from_numpy(X_in).float().to(device)
 
-    train_len = len(X_train)
-    test_len = len(X_test)
+    train_len = len(train_data)
+    test_len = len(test_data)
 
     # restricts data loading to a subset of the dataset exclusive to the current process
     args.shuff = args.shuff and not args.testrun
@@ -567,12 +555,12 @@ def main():
     kwargs = {'worker_init_fn': seed_worker, 'generator': g} if args.testrun else {}
 
     train_loader = torch.utils.data.DataLoader(dataset = GenerateDataset([x for x in range(train_len)]), batch_size=args.batch_size,
-                                               shuffle=True,
+                                               sampler = train_sampler,
                                                num_workers=args.nworker, pin_memory=False,
                                                persistent_workers=pers_w, drop_last=True,
                                                prefetch_factor=args.prefetch, **kwargs)
-    test_loader = torch.utils.data.DataLoader(dataset = TestDataset([x for x in range(test_len)]), batch_size=2, shuffle=True,
-                                              num_workers=args.nworker, pin_memory=False,
+    test_loader = torch.utils.data.DataLoader(dataset = TestDataset([x for x in range(test_len)]), batch_size=2,
+                                              sampler=test_sampler, num_workers=args.nworker, pin_memory=False,
                                               persistent_workers=pers_w, drop_last=True,
                                               prefetch_factor=args.prefetch, **kwargs)
 
@@ -688,12 +676,13 @@ def main():
             best_acc = min(loss_acc, best_acc)
             V_p_pred_norm = distrib_model(X_in)
             u_pred, v_pred, p_pred = denormalize(V_p_pred_norm, u_min, u_max, v_min, v_max, p_min, p_max)
-            result = [V_p_star, u_pred,v_pred, p_pred, loss_acc_list, epoch]
+            result = [V_p_star,X_in,V_p_pred_norm, u_pred,v_pred, p_pred, loss_acc_list, epoch]
             f = open('./result/result_Taylor_green_vortex.pkl', 'wb')
             pickle.dump(result, f)
             f.close()
 
-        print(epoch)
+        if grank==0:
+            print(epoch)
 
     #finalise training
     # save final state
@@ -720,8 +709,8 @@ def main():
         f_time = time.time() - st
         print(f'TIMER: final time: {f_time} s')
 
-    result = [V_p_star, u_pred, v_pred, p_pred, loss_acc_list, acc_test, f_time]
-    f = open('./result/result_Taylot_green_vortex.pkl', 'wb')
+    result = [V_p_star, X_in, V_p_pred_norm, u_pred, v_pred, p_pred, loss_acc_list, acc_test, f_time]
+    f = open('./result/result_Taylor_green_vortex.pkl', 'wb')
 
     pickle.dump(result, f)
     f.close()
