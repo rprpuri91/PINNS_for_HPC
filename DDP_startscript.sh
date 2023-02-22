@@ -5,30 +5,30 @@
 #SBATCH --account=raise-ctp2
 #SBATCH --mail-user=
 #SBATCH --mail-type=ALL
-#SBATCH --output=job_red.out
-#SBATCH --error=job_red.err
-#SBATCH --time=05:00:00
+#SBATCH --output=job_redNC.out
+#SBATCH --error=job_redNC.err
+#SBATCH --time=06:00:00
 
 # configure node and process count on the CM
 #SBATCH --partition=dc-gpu
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=32
-#SBATCH --gpus-per-node=1
+#SBATCH --gpus-per-node=2
 #SBATCH --exclusive
 
 # gres options have to be disabled for deepv
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:2
 
 # parameters
 debug=false # do debug
 bs=8       # batch-size
-epochs=20000    # epochs
+epochs=10000    # epochs
 lr=0.001     # learning rate
 
 # AT
 #dataDir="/p/scratch/raise-ctp2/T31_LD/"
-COMMAND="./Jureca/Taylor_Green_Vortex_PINN_reduced.py"
+COMMAND="./Jureca/Taylor_Green_Vortex_PINN_noCentre.py"
 EXEC="$COMMAND \
   --batch-size $bs \
   --epochs $epochs \

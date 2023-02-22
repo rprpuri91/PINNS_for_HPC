@@ -9,7 +9,7 @@ import torch.distributed as dist
 import torch.nn.functional as F
 import torch.optim as optim
 import pickle
-
+from torch.utils.data import Dataset, DataLoader
 
 def pars_ini():
     global args
@@ -22,7 +22,7 @@ def pars_ini():
 
     #model
     parser.add_argument('--batch-size', type=int, default=16, help='input batch size for training (default: 16)')
-    parser.add_argument('--epochs', type=int, default=1000, help='number of training epochs (default: 10)')
+    parser.add_argument('--epochs', type=int, default=72, help='number of training epochs (default: 10)')
     parser.add_argument('--lr', type=float, default=0.001, help='learning rate (default: 0.001)')
     parser.add_argument('--wdecay', type=float, default=0.003, help='weight decay in ADAM (default: 0.003)')
     parser.add_argument('--gamma', type=float, default=0.95,
@@ -83,14 +83,18 @@ class Taylor_green_vortex_PINN(nn.Module):
             a = self.fc4(a)
 
             '''
-        for i in range(len(self.layers) - 3):
+        for i in range(len(self.layers) - 2):
             z = self.linears[i](a)
 
             a = self.activation2(z)
 
+        a = self.linears[-2](a)        
+
         a = self.activation(a)
 
         a = self.linears[-1](a)
+
+        #print("\tIn Model: input size", X.size(), "output size", a.size())
 
         return a
 
@@ -102,8 +106,8 @@ def scaling(X):
 
     return x
 
-def h5_loader(path):
-    h5 = h5py.File('data_Taylor_Green_Vortex_reduced.h5', 'r')
+def h5_loader():
+    h5 = h5py.File('./data/data_Taylor_Green_Vortex_reduced.h5', 'r')
 
     try:
         domain = h5.get('domain')
@@ -111,40 +115,35 @@ def h5_loader(path):
         right = h5.get('right')
         top = h5.get('top')
         bottom = h5.get('bottom')
+        initial = h5.get('initial')
+        center = h5.get('center')
         full = h5.get('full')
 
 
-        X_train_domain = np.array(domain.get('data1'))
-        V_p_train_domain = np.array(domain.get('data2'))
-        X_test_domain = np.array(domain.get('data3'))
-        V_p_test_domain = np.array(domain.get('data4'))
+        train_domain = np.array(domain.get('data1'))
+        test_domain = np.array(domain.get('data2'))
 
-        X_train_left = np.array(left.get('data1'))
-        V_p_train_left = np.array(left.get('data2'))
-        X_test_left = np.array(left.get('data3'))
-        V_p_test_left = np.array(left.get('data4'))
+        train_left = np.array(left.get('data1'))
+        test_left = np.array(left.get('data2'))
 
-        X_train_right = np.array(right.get('data1'))
-        V_p_train_right = np.array(right.get('data2'))
-        X_test_right = np.array(right.get('data3'))
-        V_p_test_right = np.array(right.get('data4'))
+        train_right = np.array(right.get('data1'))
+        test_right = np.array(right.get('data2'))
 
-        X_train_top = np.array(top.get('data1'))
-        V_p_train_top = np.array(top.get('data2'))
-        X_test_top = np.array(top.get('data3'))
-        V_p_test_top = np.array(top.get('data4'))
+        train_top = np.array(top.get('data1'))
+        test_top = np.array(top.get('data2'))
 
-        X_train_bottom = np.array(bottom.get('data1'))
-        V_p_train_bottom = np.array(bottom.get('data2'))
-        X_test_bottom = np.array(bottom.get('data3'))
-        V_p_test_bottom = np.array(bottom.get('data4'))
+        train_bottom = np.array(bottom.get('data1'))
+        test_bottom = np.array(bottom.get('data2'))
+
+        train_initial = np.array(initial.get('data1'))
+        test_initial = np.array(initial.get('data2'))
+
+        center_data = np.array(center.get('data1'))
 
         X_in = np.array(full.get('data1'))
-        V_star = np.array(full.get('data2'))
-        p_star = np.array(full.get('data3'))
+        V_p_star = np.array(full.get('data2'))
 
-        V_p_star = np.vstack([V_star[:, 0], V_star[:, 1], p_star])
-        print(V_p_star)
+        #print(V_p_star)
 
         '''print(X_train_domain.shape)
         print(X_train_left.shape)
@@ -157,15 +156,50 @@ def h5_loader(path):
         print(V_p_train_top.shape)
         print(V_p_train_bottom.shape)'''
 
-        X_train = np.vstack([X_train_left, X_train_right, X_train_top, X_train_bottom])
-        X_test = np.vstack([X_test_left, X_test_right, X_test_top, X_test_bottom])
-        V_p_train = np.vstack([V_p_train_left, V_p_train_right, V_p_train_top,V_p_train_bottom])
-        V_p_test = np.vstack([V_p_test_left, V_p_test_right, V_p_test_top, V_p_test_bottom])
-        #print('shape',V_p_train.shape)
+
+        train_data = np.vstack([train_domain, train_left, train_right, train_top, train_bottom, train_initial])
+        test_data = np.vstack([test_domain, test_left, test_right, test_top, test_bottom, test_initial])
+        
+
+        '''print('########################################')
+        for i in range(len(train_data)):
+            print(train_data[i])
+            print("\n")
+
+        print('#######################################')
+        '''
     except Exception as e:
         print(e)
 
-    return X_train, V_p_train, X_test, V_p_test, X_in, V_p_star
+    return train_data, test_data, X_in, V_p_star
+
+class GenerateDataset(Dataset):
+
+    def __init__(self, list_id):
+        self.train_data, _ , _, _ = h5_loader()
+        self.len = len(self.train_data)
+
+    def __getitem__(self,index):
+        data0 = self.train_data[index]
+        data = torch.from_numpy(data0).float()
+        return data
+
+    def __len__(self):
+        return self.len    
+
+class TestDataset(Dataset):
+
+    def __init__(self, list_id):
+        _, self.test_data, _, _ = h5_loader()
+        self.len = len(self.test_data)
+
+    def __getitem__(self, index):
+        data0 = self.test_data[index]
+        data = torch.from_numpy(data0).float()
+        return data
+    
+    def __len__(self):
+        return self.len
 
 def train(model, device , train_loader, optimizer, epoch,grank, gwsize, rho, nu):
     model.train()
@@ -176,12 +210,12 @@ def train(model, device , train_loader, optimizer, epoch,grank, gwsize, rho, nu)
     count = 0
     for batch_idx, (data) in enumerate(train_loader):
         t = time.perf_counter()
-        if count % 1000 == 0:
-            print('Batch: ', count)
+        if count % 1000 == 0 and grank==0:
+           print('Batch: ', count)
         optimizer.zero_grad()
         # predictions = distrib_model(inputs)
-
-        loss = total_loss(data, device, rho, nu)
+        #with torch.cuda.amp.autocast():
+        loss = total_loss(model, data, device, rho, nu, epoch, batch_idx)
 
         loss.backward()
         optimizer.step()
@@ -198,7 +232,7 @@ def train(model, device , train_loader, optimizer, epoch,grank, gwsize, rho, nu)
     return loss_acc
 
 
-def test(model, device, test_loader, grank, gwsize, rho, nu):
+def test(model, device, test_loader, grank, gwsize, rho, nu, epoch):
     model.eval()
     test_loss = 0.0
 
@@ -206,9 +240,10 @@ def test(model, device, test_loader, grank, gwsize, rho, nu):
     with torch.no_grad():
         for data in test_loader:
             # print(data)
+
             inputs = data[0]
 
-            loss = total_loss(data, device, rho, nu)
+            loss = total_loss(model, data, device, rho, nu, epoch, None)
 
             test_loss += loss.item() / inputs.shape[0]
 
@@ -216,6 +251,17 @@ def test(model, device, test_loader, grank, gwsize, rho, nu):
             test_loss_acc.append(test_loss)
 
     return test_loss_acc
+
+def denormalize(V_p_norm, u_min, u_max, v_min, v_max, p_min, p_max):
+    u_norm = V_p_norm[:,0]
+    v_norm = V_p_norm[:,1]
+    p_norm = V_p_norm[:,2]
+
+    u = ((u_norm + 1) * (u_max - u_min) / 2) + u_min
+    v = ((v_norm + 1) * (v_max - v_min) / 2) + v_min
+    p = ((p_norm + 1) * (p_max - p_min) / 2) + p_min
+
+    return u, v, p
 
 # save state of the training
 def save_state(epoch,distrib_model,loss_acc,optimizer,res_name, grank, gwsize, is_best):#,grank,gwsize,is_best):
@@ -227,16 +273,16 @@ def save_state(epoch,distrib_model,loss_acc,optimizer,res_name, grank, gwsize, i
         # find which rank is_best happened - select first rank if multiple
         is_best_rank = np.where(np.array(is_best_m)==True)[0][0]
 
-    # collect state
-    state = {'epoch': epoch + 1,
-             'state_dict': distrib_model.state_dict(),
-             'best_acc': loss_acc,
-             'optimizer' : optimizer.state_dict()}
+        # collect state
+        state = {'epoch': epoch + 1,
+                'state_dict': distrib_model.state_dict(),
+                'best_acc': loss_acc,
+                'optimizer' : optimizer.state_dict()}
 
         # write on worker with is_best
-    if grank == is_best_rank:
-        torch.save(state,'./'+res_name)
-        print(f'DEBUG: state is saved on epoch:{epoch} in {time.time()-rt} s')
+        if grank == is_best_rank:
+            torch.save(state,'./'+res_name)
+            print(f'DEBUG: state is saved on epoch:{epoch} in {time.time()-rt} s')
 
 # deterministic dataloader
 def seed_worker(worker_id):
@@ -311,97 +357,138 @@ def par_allgather_obj(obj,gwsize):
 
 def prediction(x,y,t):
     g = torch.cat((x, y, t), dim=1)
-    predictions = distrib_model(g)
+    predictions = NNmodel(g)
     return predictions
 
 def pred_hessian_u(x,y,t):
     g = torch.cat((x, y, t), dim=1)
-    predictions = distrib_model(g)
-    return predictions[:,0].sum()
+    predictions = NNmodel(g)[:,0]
+    return predictions.sum()
 
 def pred_hessian_v(x,y,t):
     g = torch.cat((x, y, t), dim=1)
-    predictions = distrib_model(g)
-    return predictions[:,1].sum()
+    predictions = NNmodel(g)[:,1]
+    return predictions.sum()
 
-def total_loss(data, device, rho, nu):
+def pred_hessian_p(x,y,t):
+    g = torch.cat((x, y, t), dim=1)
+    predictions = NNmodel(g)[:,2]
+    return predictions.sum()
+
+def total_loss(model, data, device, rho, nu, epoch, batch):
 
     loss_function = nn.MSELoss()
+    #print(data)
+    inputs = data[:,0:3].to(device)
 
-    inputs = data[0]
+    #print('input', inputs)
+
+    exact = data[:,3:].to(device)
+
+    #print('exact', exact)
 
     g = inputs.clone()
-    g.requires_grad = True
+    #g.requires_grad = True
 
-    exact = data[1]
+    if epoch > 0:
+        global NNmodel
+        NNmodel = model
 
-    v1 = torch.zeros_like(inputs, device = device)
-    v2 = torch.zeros_like(inputs, device = device)
-    v3 = torch.zeros_like(inputs, device = device)
+        v1 = torch.zeros_like(inputs, device = device)
+        v2 = torch.zeros_like(inputs, device = device)
+        v3 = torch.zeros_like(inputs, device = device)
 
-    v1[:,0] = 1
-    v2[:,1] = 1
-    v3[:,2] = 1
+        v1[:,0] = 1
+        v2[:,1] = 1
+        v3[:,2] = 1
 
-    X = torch.split(inputs, 1, dim=1)
-    x = X[0]
-    y = X[1]
-    t = X[2]
+        X = torch.split(g, 1, dim=1)
+        x = X[0]
+        y = X[1]
+        t = X[2]
 
-    predictions, du = torch.autograd.functional.vjp(prediction, (x, y, t), v1, create_graph=True)
-    ux = du[0]
-    uy = du[1]
-    ut = du[2]
+        predictions, du = torch.autograd.functional.vjp(prediction, (x, y, t), v1, create_graph=True)
+        ux = du[0]
+        uy = du[1]
+        ut = du[2]
 
-    #u_x_y = torch.cat((ux,uy), dim=1)
+        #u_x_y = torch.cat((ux,uy), dim=1)
 
-    u = predictions[:,0]
-    v = predictions[:,1]
-    p = predictions[:,2]
+        u = predictions[:,0]
+        v = predictions[:,1]
+        p = predictions[:,2]
 
-    predictions1, dv = torch.autograd.functional.vjp(prediction, (x, y, t), v2, create_graph=True)
-    vx = dv[0]
-    vy = dv[1]
-    vt = dv[2]
+        predictions1, dv = torch.autograd.functional.vjp(prediction, (x, y, t), v2, create_graph=True)
+        vx = dv[0]
+        vy = dv[1]
+        vt = dv[2]
 
-    #v_x_y = torch.cat((vx,vy), dim=1)
+        #v_x_y = torch.cat((vx,vy), dim=1)
 
-    predictions2, dp = torch.autograd.functional.vjp(prediction, (x, y, t), v3, create_graph=True)
-    px = dp[0]
-    py = dp[1]
-    #pt = dp[2]
+        predictions2, dp = torch.autograd.functional.vjp(prediction, (x, y, t), v3, create_graph=True)
+        px = dp[0]
+        py = dp[1]
+        #pt = dp[2]
 
-    v4 = torch.ones_like(x)
-    v5 = torch.zeros_like(x)
-    C, H_u = torch.autograd.functional.vhp(pred_hessian_u, (x,y,t), (v4,v4,v5))
+        v4 = torch.ones_like(x)
+        v5 = torch.zeros_like(x)
+        C, H_u = torch.autograd.functional.vhp(pred_hessian_u, (x,y,t), (v4,v4,v5))
 
-    C, H_v = torch.autograd.functional.vhp(pred_hessian_v, (x, y, t), (v4, v4, v5))
+        C, H_v = torch.autograd.functional.vhp(pred_hessian_v, (x, y, t), (v4, v4, v5))
 
-    u_xx = H_u[0]
-    u_yy = H_u[1]
-    v_xx = H_v[0]
-    v_yy = H_v[1]
+        _, H_p = torch.autograd.functional.vhp(pred_hessian_p, (x,y,t), (v4,v4, v5))
 
-    #dv2_dx2 = torch.autograd.grad(vx, x, torch.ones(x.shape[0], 1).to(device), create_graph=True)
-    #dv2_dy2 = torch.autograd.grad(vy, y, torch.ones(y.shape[0], 1).to(device), create_graph=True)
+        u_xx = H_u[0]
+        u_yy = H_u[1]
+        v_xx = H_v[0]
+        v_yy = H_v[1]
+        p_xx = H_p[0]
+        p_yy = H_p[1]
 
-    continuity = ux + vy
-    ns1 = ut + u*ux + v*uy + (1/rho)*px - nu*(u_xx + u_yy)
-    ns2 = vt + u*vx + v*vy + (1/rho)*py - nu*(v_xx + v_yy)
+        #dv2_dx2 = torch.autograd.grad(vx, x, torch.ones(x.shape[0], 1).to(device), create_graph=True)
+        #dv2_dy2 = torch.autograd.grad(vy, y, torch.ones(y.shape[0], 1).to(device), create_graph=True)
 
-    target1 = torch.zeros_like(continuity, device=device)
-    target2 = torch.zeros_like(ns1, device=device)
-    target3 = torch.zeros_like(ns2, device=device)
+        continuity = ux + vy
+        ns1 = ut + u*ux + v*uy + (1/rho)*px - nu*(u_xx + u_yy)
+        ns2 = vt + u*vx + v*vy + (1/rho)*py - nu*(v_xx + v_yy)
+        
+        ps = p_xx + p_yy + rho*(ux*ux + 2*uy*vx + vy*vy) 
 
-    loss_continuity = loss_function(continuity, target1)
-    loss_ns1 = loss_function(ns1, target2)
-    loss_ns2 = loss_function(ns2, target3)
+        target1 = torch.zeros_like(continuity, device=device)
+        target2 = torch.zeros_like(ns1, device=device)
+        target3 = torch.zeros_like(ns2, device=device)
+        target4 = torch.zeros_like(ps, device=device)
 
-    loss_variable = loss_function(predictions, exact)
+        loss_continuity = loss_function(continuity, target1)
+        loss_ns1 = loss_function(ns1, target2)
+        loss_ns2 = loss_function(ns2, target3)
+        loss_ps = loss_function(ps, target4)
 
-    return loss_continuity + loss_ns1 + loss_ns2 + loss_variable
+        loss_variable = loss_function(predictions, exact)
 
+        loss = loss_continuity + loss_ns1 + loss_ns2 + loss_ps + loss_variable
+        
+        if(batch is not None):
+            if(epoch == 1 and batch == 0):
+                f = open("./result/loss.txt", "x")
 
+            else:
+                f = open("./result/loss.txt", "a")
+                #f.writelines([str(loss_continuity.item()) + " " + str(loss_ns1.item()) + " " + str(loss_ns2.item()) + " " + str(loss_variable.item()) + "\n"])
+                f.writelines(['Epoch: {:03d}, LossContinuity: {:.9f}, LossNS1: {:.9f}, LossNS2: {:.9f}, LossPS: {:.9f}, LossPred: {:.9f}'.
+                format(epoch, loss_continuity.item(), loss_ns1.item(), loss_ns2.item(), loss_ps.item(), loss_variable.item()) + '\n'])
+                #f.writelines(['Epoch: {:03d}, LossContinuity: {:.9f}, LossNS1: {:.9f}, LossNS2: {:.9f}'.
+                #format(epoch, loss_continuity.item(), loss_ns1.item(), loss_ns2.item()) + '\n'])
+
+                f.close()
+
+    '''else:
+        predictions = model(g)
+
+        loss = loss_function(predictions, exact)'''
+   
+    #print("\tOutside: input size", inputs.size(), "output size", output.size())
+    return loss
 
 def main():
 
@@ -413,6 +500,8 @@ def main():
 
     # get directory
     program_dir = os.getcwd()
+
+    torch.backends.cudnn.benchmark = True
 
     # start time
     st = time.time()
@@ -469,35 +558,30 @@ def main():
         if args.testrun:
             torch.cuda.manual_seed(args.nseed)
 
-    X_train, V_p_train, X_test, V_p_test, X_in, V_p_star = h5_loader(args.data_dir)
+    train_data, test_data, X_in, V_p_star = h5_loader()
 
-    X_train = torch.from_numpy(X_train).float().to(device)
-    X_test = torch.from_numpy(X_test).float().to(device)
-    V_p_train = torch.from_numpy(V_p_train).float().to(device)
-    V_p_test = torch.from_numpy(V_p_test).float().to(device)
+
+    u_min = V_p_star[:,0].min()
+    u_max = V_p_star[:,0].max()
+    v_min = V_p_star[:,1].min()
+    v_max = V_p_star[:,1].max()
+    p_min = V_p_star[:,2].min()
+    p_max = V_p_star[:,2].max()
 
     rho = 1.2
     nu = 1.516e-5
 
-    V_min = V_p_star[:,0:2].min()
-    V_max = V_p_star[:,0:2].max()
-
-    p_min = V_p_star[:,2].min()
-    p_max = V_p_star[:,2].max()
-
-    tensors1 = [X_train,V_p_train]
-    tensors2 = [X_test,V_p_test]
-    # create dataset
-    train_dataset = torch.utils.data.TensorDataset(*tensors1)
-    test_dataset = torch.utils.data.TensorDataset(*tensors2)
     X_in = torch.from_numpy(X_in).float().to(device)
+
+    train_len = len(train_data)
+    test_len = len(test_data)
 
     # restricts data loading to a subset of the dataset exclusive to the current process
     args.shuff = args.shuff and not args.testrun
-    train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset,
-                            num_replicas=gwsize, rank=grank, shuffle=args.shuff)
-    test_sampler = torch.utils.data.distributed.DistributedSampler(test_dataset,
-                            num_replicas=gwsize, rank=grank, shuffle=args.shuff)
+    train_sampler = torch.utils.data.distributed.DistributedSampler(dataset = GenerateDataset([x for x in range(train_len)]),
+                            num_replicas=gwsize, rank=grank, shuffle=True)
+    test_sampler = torch.utils.data.distributed.DistributedSampler(dataset = TestDataset([x for x in range(test_len)]),
+                            num_replicas=gwsize, rank=grank, shuffle=True)
 
     # distribute dataset to workers
     # persistent workers
@@ -506,13 +590,13 @@ def main():
     # deterministic testrun - the same dataset each run
     kwargs = {'worker_init_fn': seed_worker, 'generator': g} if args.testrun else {}
 
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size,
-                                               sampler=train_sampler,
+    train_loader = torch.utils.data.DataLoader(dataset = GenerateDataset([x for x in range(train_len)]), batch_size=args.batch_size,
+                                               sampler = train_sampler,
                                                num_workers=args.nworker, pin_memory=False,
                                                persistent_workers=pers_w, drop_last=True,
                                                prefetch_factor=args.prefetch, **kwargs)
-    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=2, sampler=test_sampler,
-                                              num_workers=args.nworker, pin_memory=False,
+    test_loader = torch.utils.data.DataLoader(dataset = TestDataset([x for x in range(test_len)]), batch_size=2,
+                                              sampler=test_sampler, num_workers=args.nworker, pin_memory=False,
                                               persistent_workers=pers_w, drop_last=True,
                                               prefetch_factor=args.prefetch, **kwargs)
 
@@ -530,22 +614,30 @@ def main():
 
     layers = np.array([3, 60, 60, 60, 60, 60, 3])
     model = Taylor_green_vortex_PINN(layers).to(device)
-    global distrib_model
-    # distribute model tpo workers
+   
+    print(device)
+    # distribute model too workers
     if args.cuda:
         distrib_model = torch.nn.parallel.DistributedDataParallel(model,\
-                        device_ids = [device], output_device=device, find_unused_parameters = True)
+                        device_ids = [device], output_device=device, find_unused_parameters = False)
     else:
-        distrib_model = torch.nn.parallel.DistributedDataParallel(model, find_unused_parameters = True)
+        distrib_model = torch.nn.parallel.DistributedDataParallel(model, find_unused_parameters = False)
+
+    '''if args.cuda:
+        distrib_model = nn.parallel.DistributedDataParallel(model,\
+            device_ids=[device], output_device=device)
+    else:
+        distrib_model = nn.parallel.DistributedDataParallel(model)'''
 
     # optimizer
-    optimizer = torch.optim.SGD(distrib_model.parameters(), lr=args.lr)
+    #optimizer = torch.optim.SGD(distrib_model.parameters(), lr=args.lr)
+    optimizer = torch.optim.Adam(distrib_model.parameters(), lr=args.lr, weight_decay=args.wdecay)
     #scheduler_lr = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=args.gamma)
 
     # resume state
     start_epoch = 1
     best_acc = np.Inf
-    res_name = 'checkpoint_noDom_reduced.pth.tar'
+    res_name = 'checkpoint_red_NC.pth.tar'
     if os.path.isfile(res_name) and not args.benchrun:
         try:
             dist.barrier()
@@ -592,7 +684,7 @@ def main():
         loss_acc_list.append(loss_acc)
 
         # testing
-        acc_test = test(distrib_model, device, test_loader, grank, gwsize, rho, nu)
+        acc_test = test(distrib_model, device, test_loader, grank, gwsize, rho, nu, epoch)
 
         if epoch == start_epoch:
             first_ep_t = time.time() - lt
@@ -615,18 +707,19 @@ def main():
         # if a better state is found
         is_best = loss_acc < best_acc
         if epoch % args.restart_int == 0 and not args.benchrun:
+
             save_state(epoch, model, loss_acc, optimizer, res_name, grank, gwsize, is_best)
             #save_state(epoch, model, loss_acc, optimizer, res_name)
             best_acc = min(loss_acc, best_acc)
-            V_p_pred_norm = model.forward(X_in)
-            V_pred = V_p_pred_norm[:, 0:2] * (V_max - V_min) + V_min
-            p_pred = V_p_pred_norm[:, 0] * (p_max - p_min) + p_min
-            result = [V_p_star, V_pred, p_pred, loss_acc_list, epoch]
-            f = open('result_Taylor_green_vortex_noDom_reduced.pkl', 'wb')
+            V_p_pred_norm = distrib_model(X_in)
+            u_pred, v_pred, p_pred = denormalize(V_p_pred_norm, u_min, u_max, v_min, v_max, p_min, p_max)
+            result = [V_p_star,X_in,V_p_pred_norm, u_pred,v_pred, p_pred, loss_acc_list, epoch]
+            f = open('./result/result_Taylor_green_vortex_reduced_NC.pkl', 'wb')
             pickle.dump(result, f)
             f.close()
 
-        print(epoch)
+        if grank==0:
+            print(epoch)
 
     #finalise training
     # save final state
@@ -646,16 +739,16 @@ def main():
         print(f'TIMER: total testing time: {time.time() - et} s')
 
 
-    V_p_pred_norm = model.forward(X_in)
-    V_pred = V_p_pred_norm[:, 0:2] * (V_max - V_min) + V_min
-    p_pred = V_p_pred_norm[:, 0] * (p_max - p_min) + p_min
+    V_p_pred_norm = distrib_model(X_in)
+    u_pred, v_pred, p_pred = denormalize(V_p_pred_norm, u_min, u_max, v_min, v_max, p_min, p_max)
 
     if grank==0:
         f_time = time.time() - st
         print(f'TIMER: final time: {f_time} s')
 
-    result = [V_p_star, V_pred, p_pred, loss_acc_list, acc_test, f_time]
-    f = open('result_Taylot_green_vortex.pkl', 'wb')
+    result = [V_p_star, X_in, V_p_pred_norm, u_pred, v_pred, p_pred, loss_acc_list, acc_test, f_time]
+    f = open('./result/result_Taylor_green_vortex_reduced_NC.pkl', 'wb')
+
     pickle.dump(result, f)
     f.close()
 
