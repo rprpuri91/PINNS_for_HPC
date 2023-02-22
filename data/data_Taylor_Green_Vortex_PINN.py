@@ -16,9 +16,9 @@ class Preprocessing_Taylor_Green():
         self.nu = nu
         self.n = n
 
-        x_values = np.arange(0, np.pi, 0.1).tolist()
-        y_values = np.arange(0, np.pi, 0.1).tolist()
-        t = np.arange(0, 1, 0.01)
+        x_values = np.arange(0, np.pi, 0.2).tolist()
+        y_values = np.arange(0, np.pi, 0.2).tolist()
+        t = np.arange(0, 1, 0.1)
         x_values.append(np.pi)
         y_values.append(np.pi)
 
@@ -70,8 +70,8 @@ class Preprocessing_Taylor_Green():
         u = self.u_star[:self.l1]
         v = self.v_star[:self.l1]
 
-        plt.quiver(self.X_center[:, 0], self.X_center[:, 1], self.u_center, self.v_center)
-        plt.show()
+        '''plt.quiver(self.X_center[:, 0], self.X_center[:, 1], self.u_center, self.v_center)
+        plt.show()'''
 
 
     def velocity(self, X):
@@ -117,7 +117,7 @@ class Preprocessing_Taylor_Green():
         p_norm = -1 + 2*((p -self.p_min) / (self.p_max - self.p_min))
         return u_norm, v_norm, p_norm
 
-    def train_test(self,X):
+    def train_test(self,X, flag):
         N = int(self.n * len(X))
 
         idx = np.random.choice(X.shape[0], N, replace=False)
@@ -136,8 +136,18 @@ class Preprocessing_Taylor_Green():
 
         u_test_norm, v_test_norm, p_test_norm = self.normalize(u_test, v_test, p_test)
 
-        V_p_train = np.vstack([u_train_norm, v_train_norm, p_train_norm])
-        V_p_test = np.vstack([u_test_norm, v_test_norm, p_test_norm])
+        if flag == "domain":
+            flag_mark = 1
+        elif flag == "left" or flag == "right" or flag == "top" or flag == "bottom":
+            flag_mark = 2
+        elif flag == "initial":
+            flag_mark = 0
+
+        flag_train = torch.full((u_train_norm.shape), flag_mark)
+        flag_test = torch.full((u_test_norm.shape), flag_mark)
+
+        V_p_train = np.vstack([u_train_norm, v_train_norm, p_train_norm, flag_train])
+        V_p_test = np.vstack([u_test_norm, v_test_norm, p_test_norm, flag_test])
 
 
         return V_p_train.T, X_train, V_p_test.T, X_test
@@ -152,12 +162,12 @@ class Preprocessing_Taylor_Green():
         X_domain = X_in1[idx, :]
 
 
-        V_p_train_domain, X_train_domain, V_p_test_domain, X_test_domain = self.train_test(X_domain)
-        V_p_train_left, X_train_left, V_p_test_left, X_test_left = self.train_test(self.X_left)
-        V_p_train_right, X_train_right, V_p_test_right, X_test_right = self.train_test(self.X_right)
-        V_p_train_top, X_train_top, V_p_test_top, X_test_top = self.train_test(self.X_top)
-        V_p_train_bottom, X_train_bottom, V_p_test_bottom, X_test_bottom = self.train_test(self.X_bottom)
-        V_p_train_initial, X_train_initial, V_p_test_initial, X_test_initial = self.train_test(self.X_initial)
+        V_p_train_domain, X_train_domain, V_p_test_domain, X_test_domain = self.train_test(X_domain, "domain")
+        V_p_train_left, X_train_left, V_p_test_left, X_test_left = self.train_test(self.X_left, "left")
+        V_p_train_right, X_train_right, V_p_test_right, X_test_right = self.train_test(self.X_right, "right")
+        V_p_train_top, X_train_top, V_p_test_top, X_test_top = self.train_test(self.X_top, "top")
+        V_p_train_bottom, X_train_bottom, V_p_test_bottom, X_test_bottom = self.train_test(self.X_bottom, "bottom")
+        V_p_train_initial, X_train_initial, V_p_test_initial, X_test_initial = self.train_test(self.X_initial, "initial")
 
 
         domain_train = np.hstack([X_train_domain,V_p_train_domain])
@@ -178,22 +188,22 @@ class Preprocessing_Taylor_Green():
         initial_train = np.hstack([X_train_initial, V_p_train_initial])
         initial_test = np.hstack([X_test_initial, V_p_test_initial])
 
-        '''plt.quiver(X_train_initial[:, 0], X_train_initial[:, 1], V_p_train_initial[:,0], V_p_train_initial[:,1])
-        plt.show()'''
+        plt.quiver(initial_train[:, 0], initial_train[:, 1], initial_train[:,3], initial_train[:,4], scale=30)
+        plt.show()
 
         V_p_star = np.vstack([self.u_star, self.v_star, self.p_star])
         V_p_center = np.vstack([self.u_center, self.v_center, self.p_center])
 
         center_data = np.hstack([self.X_center, V_p_center.T])
 
-        print(center_data.shape)
+        print(initial_train)
 
         #print(X_train_domain, V_p_train_domain)
         '''print(V_p_test_domain.shape)
         print(X_train_domain)
         print(X_test_domain.shape)'''
 
-        h5 = h5py.File('data_Taylor_Green_Vortex.h5', 'w')
+        h5 = h5py.File('data_Taylor_Green_Vortex_reduced.h5', 'w')
         g1 = h5.create_group('domain')
         g1.create_dataset('data1', data=domain_train)
         g1.create_dataset('data2', data=domain_test)
