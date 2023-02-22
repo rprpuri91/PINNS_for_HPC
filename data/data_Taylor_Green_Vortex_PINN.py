@@ -70,6 +70,8 @@ class Preprocessing_Taylor_Green():
         u = self.u_star[:self.l1]
         v = self.v_star[:self.l1]
 
+
+
         '''plt.quiver(self.X_center[:, 0], self.X_center[:, 1], self.u_center, self.v_center)
         plt.show()'''
 
@@ -104,7 +106,7 @@ class Preprocessing_Taylor_Green():
         for i in range(len(X)):
             f = -2 * self.nu * X[i][2]
             F = np.exp(f)
-            p0 = self.rho*(np.cos(2*X[i][0]) + np.sin(2*X[i][1]))*F
+            p0 = (self.rho/4)*(np.cos(2*X[i][0]) + np.cos(2*X[i][1]))*F*F
             p.append(p0)
 
         p_numpy = np.array(p)
@@ -191,7 +193,7 @@ class Preprocessing_Taylor_Green():
         plt.quiver(initial_train[:, 0], initial_train[:, 1], initial_train[:,3], initial_train[:,4], scale=30)
         plt.show()
 
-        V_p_star = np.vstack([self.u_star, self.v_star, self.p_star])
+        self.V_p_star = np.vstack([self.u_star, self.v_star, self.p_star])
         V_p_center = np.vstack([self.u_center, self.v_center, self.p_center])
 
         center_data = np.hstack([self.X_center, V_p_center.T])
@@ -233,7 +235,7 @@ class Preprocessing_Taylor_Green():
 
         g8 = h5.create_group('full')
         g8.create_dataset('data1', data=self.X_in)
-        g8.create_dataset('data2', data=V_p_star.T)
+        g8.create_dataset('data2', data=self.V_p_star.T)
 
         h5.close()
 
@@ -244,6 +246,74 @@ def main():
 
     preprocessing = Preprocessing_Taylor_Green(rho, nu, n)
     preprocessing.data_generation()
+    X_in = preprocessing.X_in
+    u_star = preprocessing.u_star
+    v_star = preprocessing.v_star
+    p_star = preprocessing.p_star
+    plotting(X_in, u_star, v_star, p_star)
+
+def plotting(X_in, u_star, v_star, p_star):
+
+
+    x_values = np.arange(0, np.pi, 0.2).tolist()
+    y_values = np.arange(0, np.pi, 0.2).tolist()
+    t = np.arange(0, 1, 0.1)
+    x_values.append(np.pi)
+    y_values.append(np.pi)
+
+    x, y = np.meshgrid(x_values, y_values)
+    # y0,x0 = np.meshgrid(y_values, x_values)
+
+    # X_in = np.hstack([x.flatten()[:, None], y.flatten()[:, None]])
+
+    l1 = len(x.flatten())
+
+
+    X_l = X_in[0:l1]
+    u0 = u_star[0:l1]
+    v0 = v_star[0:l1]
+    p0 = p_star[0:l1]
+
+    print(u0.shape)
+
+    U_grid = np.sqrt(np.square(u0) + np.square(v0))
+
+    x_grid = np.reshape(X_l[:,0], (17,17))
+    y_grid = np.reshape(X_l[:,1], (17,17))
+
+    u_grid = np.reshape(u0, (17,17))
+    v_grid = np.reshape(v0, (17,17))
+    p_grid = np.reshape(p0, (17,17))
+
+    u_grid_max = u_grid.max()
+    u_grid_min = u_grid.min()
+
+    v_grid_max = v_grid.max()
+    v_grid_min = v_grid.min()
+
+    p_grid_max = p_grid.max()
+    p_grid_min = p_grid.min()
+
+    fig, ax = plt.subplots(1, 3)
+    c1 = ax[0].pcolormesh(x_grid, y_grid, u_grid, shading='gouraud', label='u_x_exact',
+                             vmin=u_grid_min, vmax=u_grid_max, cmap=plt.get_cmap('rainbow'))
+    fig.colorbar(c1, ax=ax[0])
+    ax[0].set_title('u_test', y=-0.1)
+
+
+    c2 = ax[1].pcolormesh(x_grid, y_grid, v_grid, shading='gouraud', label='v_x_exact',
+                             vmin=v_grid_min, vmax=v_grid_max, cmap=plt.get_cmap('rainbow'))
+    fig.colorbar(c2, ax=ax[1])
+    ax[1].set_title('v_test', y=-0.1)
+
+
+    c3 = ax[2].pcolormesh(x_grid, y_grid, p_grid, shading='gouraud', label='u_x_pred', vmin=p_grid_min,
+                             vmax=p_grid_max, cmap=plt.get_cmap('rainbow'))
+    fig.colorbar(c3, ax=ax[2])
+    ax[2].set_title('p_test', y=-0.1)
+
+
+    plt.show()
 
 if __name__ == "__main__":
     main()
