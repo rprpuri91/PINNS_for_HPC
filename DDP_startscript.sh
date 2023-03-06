@@ -14,17 +14,17 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=32
-#SBATCH --gpus-per-node=2
+#SBATCH --gpus-per-node=4
 #SBATCH --exclusive
 
 # gres options have to be disabled for deepv
-#SBATCH --gres=gpu:2
+#SBATCH --gres=gpu:4
 
 # parameters
 debug=false # do debug
-bs=8       # batch-size
-epochs=10000    # epochs
-lr=0.001     # learning rate
+bs=16       # batch-size
+epochs=5000    # epochs
+lr=0.0001     # learning rate
 
 # AT
 #dataDir="/p/scratch/raise-ctp2/T31_LD/"
@@ -47,7 +47,7 @@ ml Python/3.9.6 libaio/0.3.112 HDF5/1.12.1-serial mpi-settings/CUDA
 
 # set env
 source /p/home/jusers/puri1/jureca/venv/envAI_jureca/bin/activate
-
+#source /p/project/prcoe12/RAISE/envAI_jureca/bin/activate
 # sleep a sec
 sleep 1
 

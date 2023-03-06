@@ -10,6 +10,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 import pickle
 from torch.utils.data import Dataset, DataLoader
+from lion_pytorch import Lion
 
 def pars_ini():
     global args
@@ -215,7 +216,7 @@ def train(model, device , train_loader, optimizer, epoch,grank, gwsize, rho, nu)
         optimizer.zero_grad()
         # predictions = distrib_model(inputs)
         #with torch.cuda.amp.autocast():
-        loss = total_loss(model, data, device, rho, nu, epoch, batch_idx)
+        loss = total_loss(model, data, device, rho, nu, epoch, batch_idx, grank)
 
         loss.backward()
         optimizer.step()
@@ -243,7 +244,7 @@ def test(model, device, test_loader, grank, gwsize, rho, nu, epoch):
 
             inputs = data[0]
 
-            loss = total_loss(model, data, device, rho, nu, epoch, None)
+            loss = total_loss(model, data, device, rho, nu, epoch, None, grank)
 
             test_loss += loss.item() / inputs.shape[0]
 
@@ -262,6 +263,17 @@ def denormalize(V_p_norm, u_min, u_max, v_min, v_max, p_min, p_max):
     p = ((p_norm + 1) * (p_max - p_min) / 2) + p_min
 
     return u, v, p
+
+def denormalize01(V_p_norm, u_min, u_max, v_min, v_max, p_min. p_max):
+    u_norm = V_p_norm[:,0]
+    v_norm = V_p_norm[:,1]
+    p_norm = V_p_norm[:,2]
+
+    u = u_norm * (u_max - u_min) + u_min
+    v = v_norm * (v_max - v_min) + v_min
+    p = p_norm * (p_max - p_min) + p_min
+
+    return u,v,p
 
 # save state of the training
 def save_state(epoch,distrib_model,loss_acc,optimizer,res_name, grank, gwsize, is_best):#,grank,gwsize,is_best):
@@ -375,7 +387,7 @@ def pred_hessian_p(x,y,t):
     predictions = NNmodel(g)[:,2]
     return predictions.sum()
 
-def total_loss(model, data, device, rho, nu, epoch, batch):
+def total_loss(model, data, device, rho, nu, epoch, batch, grank):
 
     loss_function = nn.MSELoss()
     #print(data)
@@ -383,111 +395,170 @@ def total_loss(model, data, device, rho, nu, epoch, batch):
 
     #print('input', inputs)
 
-    exact = data[:,3:].to(device)
+    exact = data[:,3:6].to(device)
 
     #print('exact', exact)
 
     g = inputs.clone()
-    #g.requires_grad = True
+    g.requires_grad = True
 
-    if epoch > 0:
-        global NNmodel
-        NNmodel = model
+    #flag = data[:,6]
 
-        v1 = torch.zeros_like(inputs, device = device)
-        v2 = torch.zeros_like(inputs, device = device)
-        v3 = torch.zeros_like(inputs, device = device)
+    #print('flag', flag)
 
-        v1[:,0] = 1
-        v2[:,1] = 1
-        v3[:,2] = 1
+    global NNmodel
+    NNmodel = model
+    
+    predictions_grad = model(inputs)
 
-        X = torch.split(g, 1, dim=1)
-        x = X[0]
-        y = X[1]
-        t = X[2]
+    v1 = torch.zeros_like(inputs, device = device)
+    v2 = torch.zeros_like(inputs, device = device)
+    v3 = torch.zeros_like(inputs, device = device)
 
-        predictions, du = torch.autograd.functional.vjp(prediction, (x, y, t), v1, create_graph=True)
-        ux = du[0]
-        uy = du[1]
-        ut = du[2]
+    v1[:,0] = 1
+    v2[:,1] = 1
+    v3[:,2] = 1
 
-        #u_x_y = torch.cat((ux,uy), dim=1)
+    X = torch.split(g, 1, dim=1)
+    x = X[0]
+    y = X[1]
+    t = X[2]
 
-        u = predictions[:,0]
-        v = predictions[:,1]
-        p = predictions[:,2]
-
-        predictions1, dv = torch.autograd.functional.vjp(prediction, (x, y, t), v2, create_graph=True)
-        vx = dv[0]
-        vy = dv[1]
-        vt = dv[2]
-
-        #v_x_y = torch.cat((vx,vy), dim=1)
-
-        predictions2, dp = torch.autograd.functional.vjp(prediction, (x, y, t), v3, create_graph=True)
-        px = dp[0]
-        py = dp[1]
-        #pt = dp[2]
-
-        v4 = torch.ones_like(x)
-        v5 = torch.zeros_like(x)
-        C, H_u = torch.autograd.functional.vhp(pred_hessian_u, (x,y,t), (v4,v4,v5))
-
-        C, H_v = torch.autograd.functional.vhp(pred_hessian_v, (x, y, t), (v4, v4, v5))
-
-        _, H_p = torch.autograd.functional.vhp(pred_hessian_p, (x,y,t), (v4,v4, v5))
-
-        u_xx = H_u[0]
-        u_yy = H_u[1]
-        v_xx = H_v[0]
-        v_yy = H_v[1]
-        p_xx = H_p[0]
-        p_yy = H_p[1]
-
-        #dv2_dx2 = torch.autograd.grad(vx, x, torch.ones(x.shape[0], 1).to(device), create_graph=True)
-        #dv2_dy2 = torch.autograd.grad(vy, y, torch.ones(y.shape[0], 1).to(device), create_graph=True)
-
-        continuity = ux + vy
-        ns1 = ut + u*ux + v*uy + (1/rho)*px - nu*(u_xx + u_yy)
-        ns2 = vt + u*vx + v*vy + (1/rho)*py - nu*(v_xx + v_yy)
-        
-        ps = p_xx + p_yy + rho*(ux*ux + 2*uy*vx + vy*vy) 
-
-        target1 = torch.zeros_like(continuity, device=device)
-        target2 = torch.zeros_like(ns1, device=device)
-        target3 = torch.zeros_like(ns2, device=device)
-        target4 = torch.zeros_like(ps, device=device)
-
-        loss_continuity = loss_function(continuity, target1)
-        loss_ns1 = loss_function(ns1, target2)
-        loss_ns2 = loss_function(ns2, target3)
-        loss_ps = loss_function(ps, target4)
-
-        loss_variable = loss_function(predictions, exact)
-
-        loss = loss_continuity + loss_ns1 + loss_ns2 + loss_ps + loss_variable
-        
-        if(batch is not None):
-            if(epoch == 1 and batch == 0):
-                f = open("./result/loss.txt", "x")
-
-            else:
-                f = open("./result/loss.txt", "a")
-                #f.writelines([str(loss_continuity.item()) + " " + str(loss_ns1.item()) + " " + str(loss_ns2.item()) + " " + str(loss_variable.item()) + "\n"])
-                f.writelines(['Epoch: {:03d}, LossContinuity: {:.9f}, LossNS1: {:.9f}, LossNS2: {:.9f}, LossPS: {:.9f}, LossPred: {:.9f}'.
-                format(epoch, loss_continuity.item(), loss_ns1.item(), loss_ns2.item(), loss_ps.item(), loss_variable.item()) + '\n'])
-                #f.writelines(['Epoch: {:03d}, LossContinuity: {:.9f}, LossNS1: {:.9f}, LossNS2: {:.9f}'.
-                #format(epoch, loss_continuity.item(), loss_ns1.item(), loss_ns2.item()) + '\n'])
-
-                f.close()
-
-    '''else:
-        predictions = model(g)
-
-        loss = loss_function(predictions, exact)'''
    
-    #print("\tOutside: input size", inputs.size(), "output size", output.size())
+        
+    predictions, du = torch.autograd.functional.vjp(prediction, (x, y, t), v1, create_graph=True)
+    ux = du[0]
+    uy = du[1]
+    ut = du[2]
+
+    #u_x_y = torch.cat((ux,uy), dim=1)
+
+    u = predictions[:,0]
+    v = predictions[:,1]
+    p = predictions[:,2]
+
+    u = torch.reshape(u, (u.shape[0],1))
+    v = torch.reshape(v, (v.shape[0],1))
+    p = torch.reshape(p, (p.shape[0],1))
+
+
+    predictions1, dv = torch.autograd.functional.vjp(prediction, (x, y, t), v2, create_graph=True)
+    vx = dv[0]
+    vy = dv[1]
+    vt = dv[2]
+
+    #v_x_y = torch.cat((vx,vy), dim=1)
+
+    predictions2, dp = torch.autograd.functional.vjp(prediction, (x, y, t), v3, create_graph=True)
+    px = dp[0]
+    py = dp[1]
+    #pt = dp[2]
+
+    v4 = torch.ones_like(x)
+    v5 = torch.zeros_like(x)
+    C, H_u = torch.autograd.functional.vhp(pred_hessian_u, (x,y,t), (v4,v4,v5), create_graph=True)
+
+    C, H_v = torch.autograd.functional.vhp(pred_hessian_v, (x, y, t), (v4, v4, v5), create_graph=True)
+
+    _, H_p = torch.autograd.functional.vhp(pred_hessian_p, (x,y,t), (v4,v4, v5), create_graph= True)
+
+    u_xx = H_u[0]
+    u_yy = H_u[1]
+    v_xx = H_v[0]
+    v_yy = H_v[1]
+    p_xx = H_p[0]
+    p_yy = H_p[1]
+
+    #dv2_dx2 = torch.autograd.grad(vx, x, torch.ones(x.shape[0], 1).to(device), create_graph=True)
+    #dv2_dy2 = torch.autograd.grad(vy, y, torch.ones(y.shape[0], 1).to(device), create_graph=True)
+    '''
+    u = predictions_grad[:,0]
+    v = predictions_grad[:,1]
+    p = predictions_grad[:,2]
+
+    u = torch.reshape(u, (u.shape[0],1))
+    v = torch.reshape(v, (v.shape[0],1))
+    p = torch.reshape(p, (p.shape[0],1)) 
+    
+    u_x_y_t = torch.autograd.grad(predictions_grad , g, torch.ones([inputs.shape[0], 3]).to(device), retain_graph=True, create_graph=True)[0]
+
+    print(u_x_y_t.shape)
+    u_xx_yy_tt = torch.autograd.grad(u_x_y_t, g, torch.ones([inputs.shape[0],3]).to(device),
+                create_graph=True)[0]
+
+    v_x_y_t = torch.autograd.grad(v,g,torch.ones([inputs.shape[0], 1]).to(device),
+                retain_graph=True, create_graph=True, allow_unused=True)[0]
+    v_xx_yy_tt = torch.autograd.grad(v_x_y_t, g, torch.ones([inputs.shape[0],3]).to(device),
+                create_graph=True)[0]
+
+    p_x_y_t = torch.autograd.grad(p,g,torch.ones([inputs.shape[0], 1]).to(device),
+                retain_graph=True, create_graph=True, allow_unused=True)[0]
+    p_xx_yy_tt = torch.autograd.grad(p_x_y_t, g, torch.ones([inputs.shape[0],3]).to(device),
+                create_graph=True)[0]
+    
+    print('uxx', u_xx_yy_tt.shape)
+
+    u_x = u_x_y_t[:,[0]]
+    u_y = u_x_y_t[:,[1]]
+    u_t = u_x_y_t[:,[2]]
+    u_xx = u_xx_yy_tt[:,[0]]
+    u_yy = u_xx_yy_tt[:,[1]]
+
+    v_x = v_x_y_t[:,[0]]
+    v_y = v_x_y_t[:,[1]]
+    v_t = v_x_y_t[:,[2]]
+    v_xx = v_xx_yy_tt[:,[0]]
+    v_yy = v_xx_yy_tt[:,[1]]
+
+    p_x = p_x_y_t[:,[0]]
+    p_y = p_x_y_t[:,[1]]
+    p_t = p_x_y_t[:,[2]]
+    p_xx = p_xx_yy_tt[:,[0]]
+    p_yy = p_xx_yy_tt[:,[1]]
+    ''' 
+   
+    continuity = ux + vy
+    ns1 = ut + u*ux + v*uy + (1/rho)*px - nu*(u_xx + u_yy)
+    ns2 = vt + u*vx + v*vy + (1/rho)*py - nu*(v_xx + v_yy)
+        
+    ps = p_xx + p_yy + rho*(ux*ux + 2*uy*vx + vy*vy) 
+
+    
+    target1 = torch.zeros_like(continuity, device=device)
+    target2 = torch.zeros_like(ns1, device=device)
+    target3 = torch.zeros_like(ns2, device=device)
+    target4 = torch.zeros_like(ps, device=device)
+
+    loss_continuity = loss_function(continuity, target1)
+    loss_ns1 = loss_function(ns1, target2)
+    loss_ns2 = loss_function(ns2, target3)
+    loss_ps = loss_function(ps, target4)
+    
+
+    loss_variable = loss_function(predictions, exact)
+
+    if epoch < 5000:
+        #loss = loss_continuity + loss_ns1 + loss_ns2 + loss_ps + loss_variable
+        loss = loss_continuity + loss_variable
+    else:
+        loss = loss_continuity + loss_ns1 + loss_ns2 + loss_ps + 0.1 * loss_variable
+
+    if(batch is not None and grank==0):
+        if(epoch == 1 and batch == 0):
+            f = open("./result/loss.txt", "x")
+
+        else:
+            f = open("./result/loss.txt", "a")
+            #f.writelines([str(loss_continuity.item()) + " " + str(loss_ns1.item()) + " " + str(loss_ns2.item()) + " " + str(loss_variable.item()) + "\n"])
+            f.writelines(['Epoch: {:03d}, LossContinuity: {:.9f}, LossNS1: {:.9f}, LossNS2: {:.9f}, LossPS: {:.9f}, LossPred: {:.9f}'.
+            format(epoch, loss_continuity.item(), loss_ns1.item(), loss_ns2.item(), loss_ps.item(), loss_variable.item()) + '\n'])
+            #f.writelines(['Epoch: {:03d}, LossContinuity: {:.9f}, LossNS1: {:.9f}, LossNS2: {:.9f}'.
+            #format(epoch, loss_continuity.item(), loss_ns1.item(), loss_ns2.item()) + '\n'])
+
+            f.close()
+
+   
+   
     return loss
 
 def main():
@@ -612,7 +683,7 @@ def main():
 
     # create model
 
-    layers = np.array([3, 60, 60, 60, 60, 60, 3])
+    layers = np.array([3, 256, 256, 256, 256, 256, 3])
     model = Taylor_green_vortex_PINN(layers).to(device)
    
     print(device)
@@ -630,9 +701,15 @@ def main():
         distrib_model = nn.parallel.DistributedDataParallel(model)'''
 
     # optimizer
-    #optimizer = torch.optim.SGD(distrib_model.parameters(), lr=args.lr)
-    optimizer = torch.optim.Adam(distrib_model.parameters(), lr=args.lr, weight_decay=args.wdecay)
-    #scheduler_lr = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=args.gamma)
+    optimizerS = torch.optim.SGD(distrib_model.parameters(), lr=args.lr)
+    optimizerA = torch.optim.Adam(distrib_model.parameters(), lr=args.lr, weight_decay=args.wdecay)
+    optimizerB = torch.optim.LBFGS(distrib_model.parameters(), lr=args.lr, max_iter=args.epochs, 
+                 max_eval=None, tolerance_grad=1e-07, tolerance_change=1e-09, history_size=100, line_search_fn=None) 
+    optimizerL = Lion(model.parameters(), lr = args.lr)
+
+    optimizer = optimizerS
+
+    scheduler_lr = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=args.gamma)
 
     # resume state
     start_epoch = 1
@@ -686,6 +763,8 @@ def main():
         # testing
         acc_test = test(distrib_model, device, test_loader, grank, gwsize, rho, nu, epoch)
 
+        scheduler_lr.step()
+
         if epoch == start_epoch:
             first_ep_t = time.time() - lt
 
@@ -712,7 +791,7 @@ def main():
             #save_state(epoch, model, loss_acc, optimizer, res_name)
             best_acc = min(loss_acc, best_acc)
             V_p_pred_norm = distrib_model(X_in)
-            u_pred, v_pred, p_pred = denormalize(V_p_pred_norm, u_min, u_max, v_min, v_max, p_min, p_max)
+            u_pred, v_pred, p_pred = denormalize01(V_p_pred_norm, u_min, u_max, v_min, v_max, p_min, p_max)
             result = [V_p_star,X_in,V_p_pred_norm, u_pred,v_pred, p_pred, loss_acc_list, epoch]
             f = open('./result/result_Taylor_green_vortex_reduced_NC.pkl', 'wb')
             pickle.dump(result, f)
@@ -740,13 +819,13 @@ def main():
 
 
     V_p_pred_norm = distrib_model(X_in)
-    u_pred, v_pred, p_pred = denormalize(V_p_pred_norm, u_min, u_max, v_min, v_max, p_min, p_max)
+    u_pred, v_pred, p_pred = denormalize01(V_p_pred_norm, u_min, u_max, v_min, v_max, p_min, p_max)
 
     if grank==0:
         f_time = time.time() - st
         print(f'TIMER: final time: {f_time} s')
 
-    result = [V_p_star, X_in, V_p_pred_norm, u_pred, v_pred, p_pred, loss_acc_list, acc_test, f_time]
+    result = [V_p_star, X_in, V_p_pred_norm, u_pred, v_pred, p_pred, loss_acc_list, acc_tese]
     f = open('./result/result_Taylor_green_vortex_reduced_NC.pkl', 'wb')
 
     pickle.dump(result, f)
