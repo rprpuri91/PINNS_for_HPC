@@ -1,4 +1,5 @@
-#import matplotlib.pyplot as plt
+
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import h5py
@@ -107,7 +108,7 @@ def scaling(X):
     return x
 
 def h5_loader():
-    h5 = h5py.File('./data/data_Taylor_Green_Vortex_reduced.h5', 'r')
+    h5 = h5py.File('../data/data_Taylor_Green_Vortex_reduced.h5', 'r')
 
     try:
         domain = h5.get('domain')
@@ -142,6 +143,9 @@ def h5_loader():
 
         X_in = np.array(full.get('data1'))
         V_p_star = np.array(full.get('data2'))
+
+        plt.quiver(train_left[:, 0], train_left[:, 1], train_left[:, 3], train_left[:, 4], scale=30)
+        plt.show()
 
         #print(V_p_star)
 
@@ -720,9 +724,11 @@ def main():
     # clean-up
     dist.destroy_process_group()
 
-if __name__ == "__main__":
+'''if __name__ == "__main__":
     main()
-    sys.exit()
+    sys.exit()'''
+
+h5_loader()
 
 
 

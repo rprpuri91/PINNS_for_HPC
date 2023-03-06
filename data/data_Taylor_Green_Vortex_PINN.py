@@ -113,11 +113,23 @@ class Preprocessing_Taylor_Green():
 
         return p_numpy
 
+    def normalize01(self, u,v,p):
+        u_norm = (u - self.u_min) / (self.u_max - self.u_min)
+        v_norm = (v - self.v_min) / (self.v_max - self.v_min)
+        p_norm = (p - self.u_min) / (self.u_max - self.u_min)
+        return u_norm, v_norm, p_norm
+
     def normalize(self, u,v, p):
         u_norm = -1 + 2*((u - self.u_min) / (self.u_max - self.u_min))
         v_norm = -1 + 2*((v - self.v_min) / (self.v_max - self.v_min))
         p_norm = -1 + 2*((p -self.p_min) / (self.p_max - self.p_min))
         return u_norm, v_norm, p_norm
+
+    def denormalize(self, u_norm, v_norm, p_norm):
+        u = (((u_norm + 1) * (self.u_max - self.u_min)) / 2 ) + self.u_min
+        v = (((v_norm + 1) * (self.v_max - self.v_min)) / 2) + self.v_min
+        p = (((p_norm + 1) * (self.p_max - self.p_min)) / 2) + self.p_min
+        return u, v, p
 
     def train_test(self,X, flag):
         N = int(self.n * len(X))
@@ -134,9 +146,9 @@ class Preprocessing_Taylor_Green():
         p_train = self.pressure(X_train)
         p_test = self.pressure(X_test)
 
-        u_train_norm, v_train_norm, p_train_norm = self.normalize(u_train, v_train,p_train)
+        u_train_norm, v_train_norm, p_train_norm = self.normalize01(u_train, v_train,p_train)
 
-        u_test_norm, v_test_norm, p_test_norm = self.normalize(u_test, v_test, p_test)
+        u_test_norm, v_test_norm, p_test_norm = self.normalize01(u_test, v_test, p_test)
 
         if flag == "domain":
             flag_mark = 1
@@ -190,7 +202,11 @@ class Preprocessing_Taylor_Green():
         initial_train = np.hstack([X_train_initial, V_p_train_initial])
         initial_test = np.hstack([X_test_initial, V_p_test_initial])
 
-        plt.quiver(initial_train[:, 0], initial_train[:, 1], initial_train[:,3], initial_train[:,4], scale=30)
+        u0 = initial_train[:,3]
+        v0 = initial_train[:,4]
+        U_grid = np.sqrt(np.square(u0) + np.square(v0))
+        plt.quiver(initial_train[:, 0], initial_train[:, 1], initial_train[:,3], initial_train[:,4], U_grid, scale=30)
+        plt.colorbar()
         plt.show()
 
         self.V_p_star = np.vstack([self.u_star, self.v_star, self.p_star])
@@ -198,14 +214,14 @@ class Preprocessing_Taylor_Green():
 
         center_data = np.hstack([self.X_center, V_p_center.T])
 
-        print(initial_train)
+        #print(initial_train)
 
         #print(X_train_domain, V_p_train_domain)
         '''print(V_p_test_domain.shape)
         print(X_train_domain)
         print(X_test_domain.shape)'''
 
-        h5 = h5py.File('data_Taylor_Green_Vortex_reduced.h5', 'w')
+        h5 = h5py.File('data_Taylor_Green_Vortex_reduced01.h5', 'w')
         g1 = h5.create_group('domain')
         g1.create_dataset('data1', data=domain_train)
         g1.create_dataset('data2', data=domain_test)
