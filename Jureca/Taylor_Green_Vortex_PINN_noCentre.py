@@ -50,6 +50,7 @@ def pars_ini():
                         help='disables GPGPUs')
     parser.add_argument('--benchrun', action='store_true', default=False,
                         help='do a bench run w/o IO (default: False)')
+    parser.add_argument('--solution-int', type=int, default=50, help='saving prediction result after interval (default: 50)')
 
     args = parser.parse_args()
 
@@ -60,7 +61,7 @@ class Taylor_green_vortex_PINN(nn.Module):
         # Activation
         self.activation = nn.Tanh()
         self.activation2 = nn.LeakyReLU(negative_slope=0.01, inplace=False)
-
+        self.activation3 = nn.SiLU()
         self.layers = layers
 
         # layers
@@ -84,10 +85,10 @@ class Taylor_green_vortex_PINN(nn.Module):
             a = self.fc4(a)
 
             '''
-        for i in range(len(self.layers) - 2):
+        for i in range(len(self.layers) - 3):
             z = self.linears[i](a)
 
-            a = self.activation2(z)
+            a = self.activation3(z)
 
         a = self.linears[-2](a)        
 
@@ -264,7 +265,7 @@ def denormalize(V_p_norm, u_min, u_max, v_min, v_max, p_min, p_max):
 
     return u, v, p
 
-def denormalize01(V_p_norm, u_min, u_max, v_min, v_max, p_min. p_max):
+def denormalize01(V_p_norm, u_min, u_max, v_min, v_max, p_min, p_max):
     u_norm = V_p_norm[:,0]
     v_norm = V_p_norm[:,1]
     p_norm = V_p_norm[:,2]
@@ -543,9 +544,9 @@ def total_loss(model, data, device, rho, nu, epoch, batch, grank):
     else:
         loss = loss_continuity + loss_ns1 + loss_ns2 + loss_ps + 0.1 * loss_variable
 
-    if(batch is not None and grank==0):
-        if(epoch == 1 and batch == 0):
-            f = open("./result/loss.txt", "x")
+    if(batch == 0 and grank==0):
+        if(epoch == 1):
+            f = open("./result/loss.txt", "wb")
 
         else:
             f = open("./result/loss.txt", "a")
@@ -619,7 +620,8 @@ def main():
         print('DEBUG: args.nworker:', args.nworker)
         print('DEBUG: args.prefetch:', args.prefetch)
         print('DEBUG: args.cuda:', args.cuda)
-        print('DEBUG: args.benchrun:', args.benchrun, '\n')
+        print('DEBUG: args.benchrun:', args.benchrun)
+        print('DEBUG: args.solution_int:', args.solution_int, '\n')
 
     # encapsulate the model on the GPU assigned to the current process
     device = torch.device('cuda' if args.cuda and torch.cuda.is_available() else 'cpu',lrank)
@@ -707,10 +709,13 @@ def main():
                  max_eval=None, tolerance_grad=1e-07, tolerance_change=1e-09, history_size=100, line_search_fn=None) 
     optimizerL = Lion(model.parameters(), lr = args.lr)
 
-    optimizer = optimizerS
+    optimizer = optimizerA
 
-    scheduler_lr = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=args.gamma)
+    scheduler_lr1 = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=args.gamma)
+    scheduler_lr2 = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.epochs, eta_min=args.lr)
 
+    scheduler_lr = scheduler_lr2
+    
     # resume state
     start_epoch = 1
     best_acc = np.Inf
@@ -745,7 +750,7 @@ def main():
 
     et = time.time()
     loss_acc_list = []
-
+    lr_graph = []
     for epoch in range(start_epoch, args.epochs + 1):
 
         lt = time.time()
@@ -764,6 +769,11 @@ def main():
         acc_test = test(distrib_model, device, test_loader, grank, gwsize, rho, nu, epoch)
 
         scheduler_lr.step()
+        
+        # current learning rate
+        lr_cur = scheduler_lr.get_lr()
+        
+        lr_graph.append(lr_cur)
 
         if epoch == start_epoch:
             first_ep_t = time.time() - lt
@@ -784,16 +794,17 @@ def main():
                 print(prof.key_averages().table(sort_by='self_'+str(what1)+'_time_total'))
 
         # if a better state is found
-        is_best = loss_acc < best_acc
+        is_best = loss_acc <= best_acc
         if epoch % args.restart_int == 0 and not args.benchrun:
 
             save_state(epoch, model, loss_acc, optimizer, res_name, grank, gwsize, is_best)
             #save_state(epoch, model, loss_acc, optimizer, res_name)
             best_acc = min(loss_acc, best_acc)
+        if epoch % args.solution_int == 0:    
             V_p_pred_norm = distrib_model(X_in)
-            u_pred, v_pred, p_pred = denormalize01(V_p_pred_norm, u_min, u_max, v_min, v_max, p_min, p_max)
-            result = [V_p_star,X_in,V_p_pred_norm, u_pred,v_pred, p_pred, loss_acc_list, epoch]
-            f = open('./result/result_Taylor_green_vortex_reduced_NC.pkl', 'wb')
+            u_pred, v_pred, p_pred = denormalize(V_p_pred_norm, u_min, u_max, v_min, v_max, p_min, p_max)
+            result = [V_p_star,X_in,V_p_pred_norm, u_pred,v_pred, p_pred, loss_acc_list, epoch, lr_graph]
+            f = open('./result/TGV/result_Taylor_green_vortex_reduced_NC_'+str(epoch)+'.pkl', 'wb')
             pickle.dump(result, f)
             f.close()
 
@@ -819,14 +830,14 @@ def main():
 
 
     V_p_pred_norm = distrib_model(X_in)
-    u_pred, v_pred, p_pred = denormalize01(V_p_pred_norm, u_min, u_max, v_min, v_max, p_min, p_max)
+    u_pred, v_pred, p_pred = denormalize(V_p_pred_norm, u_min, u_max, v_min, v_max, p_min, p_max)
 
     if grank==0:
         f_time = time.time() - st
         print(f'TIMER: final time: {f_time} s')
 
-    result = [V_p_star, X_in, V_p_pred_norm, u_pred, v_pred, p_pred, loss_acc_list, acc_tese]
-    f = open('./result/result_Taylor_green_vortex_reduced_NC.pkl', 'wb')
+    result = [V_p_star, X_in, V_p_pred_norm, u_pred, v_pred, p_pred, loss_acc_list, acc_test, lr_graph]
+    f = open('./result/result_Taylor_green_vortex_reduced_NC_'+str(args.epochs)+'.pkl', 'wb')
 
     pickle.dump(result, f)
     f.close()
