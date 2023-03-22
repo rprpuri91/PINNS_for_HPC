@@ -16,11 +16,11 @@ class Preprocessing_Taylor_Green():
         self.nu = nu
         self.n = n
 
-        x_values = np.arange(0, np.pi, 0.2).tolist()
-        y_values = np.arange(0, np.pi, 0.2).tolist()
+        x_values = np.arange(0, 2*np.pi, 0.5).tolist()
+        y_values = np.arange(0, 2*np.pi, 0.5).tolist()
         t = np.arange(0, 1, 0.1)
-        x_values.append(np.pi)
-        y_values.append(np.pi)
+        x_values.append(2*np.pi)
+        y_values.append(2*np.pi)
 
         x,y = np.meshgrid(x_values, y_values)
         #y0,x0 = np.meshgrid(y_values, x_values)
@@ -87,8 +87,8 @@ class Preprocessing_Taylor_Green():
         for i in range(len(X)):
             f = -2*self.nu*X[i][2]
             F = np.exp(f)
-            u0 = np.sin(X[i][0])*np.cos(X[i][1])*F
-            v0 = -np.cos(X[i][0])*np.sin(X[i][1])*F
+            u0 = np.cos(X[i][0])*np.sin(X[i][1])*F
+            v0 = -np.sin(X[i][0])*np.cos(X[i][1])*F
             #U0 = [u0,v0]
             u.append(u0)
             v.append(v0)
@@ -104,9 +104,9 @@ class Preprocessing_Taylor_Green():
         p = []
 
         for i in range(len(X)):
-            f = -2 * self.nu * X[i][2]
+            f = -4 * self.nu * X[i][2]
             F = np.exp(f)
-            p0 = (self.rho/4)*(np.cos(2*X[i][0]) + np.cos(2*X[i][1]))*F*F
+            p0 = -(self.rho/4)*(np.cos(2*X[i][0]) + np.cos(2*X[i][1]))*F
             p.append(p0)
 
         p_numpy = np.array(p)
@@ -146,9 +146,9 @@ class Preprocessing_Taylor_Green():
         p_train = self.pressure(X_train)
         p_test = self.pressure(X_test)
 
-        u_train_norm, v_train_norm, p_train_norm = self.normalize01(u_train, v_train,p_train)
+        u_train_norm, v_train_norm, p_train_norm = self.normalize(u_train, v_train,p_train)
 
-        u_test_norm, v_test_norm, p_test_norm = self.normalize01(u_test, v_test, p_test)
+        u_test_norm, v_test_norm, p_test_norm = self.normalize(u_test, v_test, p_test)
 
         if flag == "domain":
             flag_mark = 1
@@ -221,7 +221,7 @@ class Preprocessing_Taylor_Green():
         print(X_train_domain)
         print(X_test_domain.shape)'''
 
-        h5 = h5py.File('data_Taylor_Green_Vortex_reduced01.h5', 'w')
+        h5 = h5py.File('data_Taylor_Green_Vortex_reduced.h5', 'w')
         g1 = h5.create_group('domain')
         g1.create_dataset('data1', data=domain_train)
         g1.create_dataset('data2', data=domain_test)
@@ -262,44 +262,28 @@ def main():
 
     preprocessing = Preprocessing_Taylor_Green(rho, nu, n)
     preprocessing.data_generation()
-    X_in = preprocessing.X_in
-    u_star = preprocessing.u_star
-    v_star = preprocessing.v_star
-    p_star = preprocessing.p_star
-    plotting(X_in, u_star, v_star, p_star)
+    X_initial = preprocessing.X_initial
+    u_initial, v_initial =preprocessing.velocity(X_initial)
+    p_initial = preprocessing.pressure(X_initial)
+    #plotting(X_initial, u_initial, v_initial, p_initial)
 
-def plotting(X_in, u_star, v_star, p_star):
+def plotting(X, u, v, p):
 
-
-    x_values = np.arange(0, np.pi, 0.2).tolist()
-    y_values = np.arange(0, np.pi, 0.2).tolist()
-    t = np.arange(0, 1, 0.1)
-    x_values.append(np.pi)
-    y_values.append(np.pi)
-
-    x, y = np.meshgrid(x_values, y_values)
-    # y0,x0 = np.meshgrid(y_values, x_values)
-
-    # X_in = np.hstack([x.flatten()[:, None], y.flatten()[:, None]])
-
-    l1 = len(x.flatten())
-
-
-    X_l = X_in[0:l1]
-    u0 = u_star[0:l1]
-    v0 = v_star[0:l1]
-    p0 = p_star[0:l1]
+    X_l = X
+    u0 = u
+    v0 = v
+    p0 = p
 
     print(u0.shape)
 
     U_grid = np.sqrt(np.square(u0) + np.square(v0))
 
-    x_grid = np.reshape(X_l[:,0], (17,17))
-    y_grid = np.reshape(X_l[:,1], (17,17))
+    x_grid = np.reshape(X_l[:,0], (14,14))
+    y_grid = np.reshape(X_l[:,1], (14,14))
 
-    u_grid = np.reshape(u0, (17,17))
-    v_grid = np.reshape(v0, (17,17))
-    p_grid = np.reshape(p0, (17,17))
+    u_grid = np.reshape(u0, (14,14))
+    v_grid = np.reshape(v0, (14,14))
+    p_grid = np.reshape(p0, (14,14))
 
     u_grid_max = u_grid.max()
     u_grid_min = u_grid.min()
@@ -309,6 +293,13 @@ def plotting(X_in, u_star, v_star, p_star):
 
     p_grid_max = p_grid.max()
     p_grid_min = p_grid.min()
+
+
+    plt.pcolormesh(x_grid, y_grid, p_grid, shading='gouraud', label='u_x_pred', vmin=p_grid_min,
+                   vmax=p_grid_max, cmap=plt.get_cmap('rainbow'))
+    plt.quiver(X_l[:, 0], X_l[:, 1], u0, v0, U_grid, scale=30)
+    plt.colorbar()
+    plt.show()
 
     fig, ax = plt.subplots(1, 3)
     c1 = ax[0].pcolormesh(x_grid, y_grid, u_grid, shading='gouraud', label='u_x_exact',
