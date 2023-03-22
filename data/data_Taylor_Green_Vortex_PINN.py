@@ -122,13 +122,16 @@ class Preprocessing_Taylor_Green():
     def normalize(self, u,v, p):
         u_norm = -1 + 2*((u - self.u_min) / (self.u_max - self.u_min))
         v_norm = -1 + 2*((v - self.v_min) / (self.v_max - self.v_min))
-        p_norm = -1 + 2*((p -self.p_min) / (self.p_max - self.p_min))
+        scale = (self.u_max + self.v_max)/(2*self.p_max)
+        print('Scale: ', 1/scale)
+        p_norm = (-1 + 2*((p -self.p_min) / (self.p_max - self.p_min)))/scale
         return u_norm, v_norm, p_norm
 
     def denormalize(self, u_norm, v_norm, p_norm):
         u = (((u_norm + 1) * (self.u_max - self.u_min)) / 2 ) + self.u_min
         v = (((v_norm + 1) * (self.v_max - self.v_min)) / 2) + self.v_min
-        p = (((p_norm + 1) * (self.p_max - self.p_min)) / 2) + self.p_min
+        scale = (self.u_max + self.v_max) / (2 * self.p_max)
+        p = (((scale * p_norm + 1) * (self.p_max - self.p_min)) / 2) + self.p_min
         return u, v, p
 
     def train_test(self,X, flag):
@@ -204,8 +207,10 @@ class Preprocessing_Taylor_Green():
 
         u0 = initial_train[:,3]
         v0 = initial_train[:,4]
+
         U_grid = np.sqrt(np.square(u0) + np.square(v0))
-        plt.quiver(initial_train[:, 0], initial_train[:, 1], initial_train[:,3], initial_train[:,4], U_grid, scale=30)
+
+        plt.quiver(initial_train[:, 0], initial_train[:, 1], u0, v0, U_grid, scale=30)
         plt.colorbar()
         plt.show()
 
@@ -273,6 +278,12 @@ def plotting(X, u, v, p):
     u0 = u
     v0 = v
     p0 = p
+    p_min = p.min()
+    p_max = p.max()
+    u_max = u.max()
+    v_max = v.max()
+    scale = (u_max + v_max)/(2* p_max)
+    p0 = (-1 + 2*((p -p_min) / (p_max - p_min)))/scale
 
     print(u0.shape)
 
@@ -294,6 +305,7 @@ def plotting(X, u, v, p):
     p_grid_max = p_grid.max()
     p_grid_min = p_grid.min()
 
+    print(p_grid_max)
 
     plt.pcolormesh(x_grid, y_grid, p_grid, shading='gouraud', label='u_x_pred', vmin=p_grid_min,
                    vmax=p_grid_max, cmap=plt.get_cmap('rainbow'))
