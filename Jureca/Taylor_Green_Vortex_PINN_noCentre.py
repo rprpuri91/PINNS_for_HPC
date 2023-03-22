@@ -712,7 +712,7 @@ def main():
     optimizer = optimizerA
 
     scheduler_lr1 = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=args.gamma)
-    scheduler_lr2 = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.epochs, eta_min=args.lr)
+    scheduler_lr2 = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.batch_size, eta_min=0.0001)
 
     scheduler_lr = scheduler_lr2
     
