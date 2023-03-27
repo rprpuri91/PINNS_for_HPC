@@ -11,6 +11,7 @@ import torch.optim as optim
 import pickle
 from torch.utils.data import Dataset, DataLoader
 from lion_pytorch import Lion
+import deepxde as dde
 
 def pars_ini():
     global args
@@ -412,7 +413,12 @@ def total_loss(model, data, device, rho, nu, epoch, batch, grank):
     global NNmodel
     NNmodel = model
     
-    #predictions_grad = model(inputs)
+    outputs = model(inputs)
+
+    u = outputs[:,0]
+    v = outputs[:,1]
+    p = outputs[:,2]
+
 
     v1 = torch.zeros_like(inputs, device = device)
     v2 = torch.zeros_like(inputs, device = device)
@@ -427,9 +433,30 @@ def total_loss(model, data, device, rho, nu, epoch, batch, grank):
     y = X[1]
     t = X[2]
 
-   
+
+    ux = dde.grad.jacobian(outputs,inputs, i=0, j=0)
+    uy = dde.grad.jacobian(outputs, inputs, i=0, j=1)
+    ut = dde.grad.jacobian(outputs, inputs, i=0, j=2)
+
+    vx = dde.grad.jacobian(outputs, inputs, i=1, j=0)
+    vy = dde.grad.jacobian(outputs, inputs, i=1, j=1)
+    vt = dde.grad.jacobian(outputs, inputs, i=1, j=2)
+
+    px = dde.grad.jacobian(outputs, inputs, i=2, j=0)
+    py = dde.grad.jacobian(outputs, inputs, i=2, j=1)
+
+    u_xx = dde.grad.hessian(outputs, inputs, component=0, i=0, j=0)
+    u_yy = dde.grad.hessian(outputs, inputs, component=0, i=1, j=1)
+
+    v_xx = dde.grad.hessian(outputs, inputs, component=1, i=0, j=0)
+    v_yy = dde.grad.hessian(outputs, inputs, component=1, i=1, j=1)
+
+    p_xx = dde.grad.hessian(outputs, inputs, component=2, i=0, j=0)
+    p_yy = dde.grad.hessian(outputs, inputs, component=2, i=1, j=1)
+
+
         
-    predictions, du = torch.autograd.functional.vjp(prediction, (x, y, t), v1, create_graph=True)
+    '''predictions, du = torch.autograd.functional.vjp(prediction, (x, y, t), v1, create_graph=True)
     ux = du[0]
     uy = du[1]
     ut = du[2]
@@ -471,7 +498,7 @@ def total_loss(model, data, device, rho, nu, epoch, batch, grank):
     v_xx = H_v[0]
     v_yy = H_v[1]
     p_xx = H_p[0]
-    p_yy = H_p[1]
+    p_yy = H_p[1]'''
 
     #dv2_dx2 = torch.autograd.grad(vx, x, torch.ones(x.shape[0], 1).to(device), create_graph=True)
     #dv2_dy2 = torch.autograd.grad(vy, y, torch.ones(y.shape[0], 1).to(device), create_graph=True)
@@ -541,7 +568,7 @@ def total_loss(model, data, device, rho, nu, epoch, batch, grank):
     loss_ps = loss_function(ps, target4)
     
 
-    loss_variable = loss_function(predictions, exact)
+    loss_variable = loss_function(outputs, exact)
 
     loss = loss_continuity + loss_ns1 + loss_ns2 + loss_ps + loss_variable
     '''if epoch < 1000:
