@@ -142,8 +142,8 @@ def h5_loader():
 
         center_data = np.array(center.get('data1'))
 
-        X_in = np.array(full.get('data1'))
-        V_p_star = np.array(full.get('data2'))
+        X_initial = np.array(full.get('data1'))
+        V_p_initial = np.array(full.get('data2'))
 
         #print(V_p_star)
 
@@ -159,8 +159,8 @@ def h5_loader():
         print(V_p_train_bottom.shape)'''
 
 
-        train_data = np.vstack([train_domain, train_left, train_right, train_top, train_bottom, train_initial])
-        test_data = np.vstack([test_domain, test_left, test_right, test_top, test_bottom, test_initial])
+        train_data = np.vstack([train_initial])
+        test_data = np.vstack([test_initial])
         
 
         '''print('########################################')
@@ -173,7 +173,7 @@ def h5_loader():
     except Exception as e:
         print(e)
 
-    return train_data, test_data, X_in, V_p_star
+    return train_data, test_data, X_initial, V_p_initial
 
 class GenerateDataset(Dataset):
 
@@ -637,20 +637,20 @@ def main():
         if args.testrun:
             torch.cuda.manual_seed(args.nseed)
 
-    train_data, test_data, X_in, V_p_star = h5_loader()
+    train_data, test_data, X_initial, V_p_initial = h5_loader()
 
 
-    u_min = V_p_star[:,0].min()
-    u_max = V_p_star[:,0].max()
-    v_min = V_p_star[:,1].min()
-    v_max = V_p_star[:,1].max()
-    p_min = V_p_star[:,2].min()
-    p_max = V_p_star[:,2].max()
+    u_min = V_p_initial[:,0].min()
+    u_max = V_p_initial[:,0].max()
+    v_min = V_p_initial[:,1].min()
+    v_max = V_p_initial[:,1].max()
+    p_min = V_p_initial[:,2].min()
+    p_max = V_p_initial[:,2].max()
 
     rho = 1.2
     nu = 1.516e-5
 
-    X_in = torch.from_numpy(X_in).float().to(device)
+    X_initial = torch.from_numpy(X_initial).float().to(device)
 
     train_len = len(train_data)
     test_len = len(test_data)
@@ -725,7 +725,7 @@ def main():
     # resume state
     start_epoch = 1
     best_acc = np.Inf
-    res_name = 'checkpoint_red_NC.pth.tar'
+    res_name = 'checkpoint_red_initial.pth.tar'
     if os.path.isfile(res_name) and not args.benchrun:
         try:
             dist.barrier()
@@ -807,10 +807,10 @@ def main():
             #save_state(epoch, model, loss_acc, optimizer, res_name)
             best_acc = min(loss_acc, best_acc)
         if epoch % args.solution_int == 0:    
-            V_p_pred_norm = distrib_model(X_in)
+            V_p_pred_norm = distrib_model(X_initial)
             u_pred, v_pred, p_pred = denormalize(V_p_pred_norm, u_min, u_max, v_min, v_max, p_min, p_max)
-            result = [V_p_star,X_in,V_p_pred_norm, u_pred,v_pred, p_pred, loss_acc_list, epoch, lr_graph]
-            f = open('./result/TGV/result_Taylor_green_vortex_reduced_NC_'+str(epoch)+'.pkl', 'wb')
+            result = [V_p_initial,X_initial,V_p_pred_norm, u_pred,v_pred, p_pred, loss_acc_list, epoch, lr_graph]
+            f = open('./result/TGV/result_Taylor_green_vortex_reduced_initial_'+str(epoch)+'.pkl', 'wb')
             pickle.dump(result, f)
             f.close()
 
@@ -835,15 +835,15 @@ def main():
         print(f'TIMER: total testing time: {time.time() - et} s')
 
 
-    V_p_pred_norm = distrib_model(X_in)
+    V_p_pred_norm = distrib_model(X_initial)
     u_pred, v_pred, p_pred = denormalize(V_p_pred_norm, u_min, u_max, v_min, v_max, p_min, p_max)
 
     if grank==0:
         f_time = time.time() - st
         print(f'TIMER: final time: {f_time} s')
 
-    result = [V_p_star, X_in, V_p_pred_norm, u_pred, v_pred, p_pred, loss_acc_list, acc_test, lr_graph]
-    f = open('./result/result_Taylor_green_vortex_reduced_NC_'+str(args.epochs)+'.pkl', 'wb')
+    result = [V_p_initial, X_initial, V_p_pred_norm, u_pred, v_pred, p_pred, loss_acc_list, acc_test, lr_graph]
+    f = open('./result/result_Taylor_green_vortex_reduced_initial_'+str(args.epochs)+'.pkl', 'wb')
 
     pickle.dump(result, f)
     f.close()
