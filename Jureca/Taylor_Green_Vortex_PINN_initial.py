@@ -163,6 +163,8 @@ def h5_loader():
         train_data = np.vstack([train_initial])
         test_data = np.vstack([test_initial])
         
+        #train_data = torch.from_numpy(train_data).float().to(device)
+        #test_data = torch.from_numpy(test_data).float().to(device)
 
         '''print('########################################')
         for i in range(len(train_data)):
@@ -420,13 +422,13 @@ def total_loss(model, data, device, rho, nu, epoch, batch, grank):
     p = outputs[:,2]
 
 
-    v1 = torch.zeros_like(inputs, device = device)
+    '''v1 = torch.zeros_like(inputs, device = device)
     v2 = torch.zeros_like(inputs, device = device)
     v3 = torch.zeros_like(inputs, device = device)
 
     v1[:,0] = 1
     v2[:,1] = 1
-    v3[:,2] = 1
+    v3[:,2] = 1'''
 
     X = torch.split(g, 1, dim=1)
     x = X[0]
@@ -597,6 +599,10 @@ def total_loss(model, data, device, rho, nu, epoch, batch, grank):
 
 def main():
 
+    # set default tensor generation device
+    if torch.cuda.is_available():
+        torch.set_default_tensor_type(torch.cuda.FloatTensor)
+
     # get parse arguments
     pars_ini()
 
@@ -700,10 +706,13 @@ def main():
                                                sampler = train_sampler,
                                                num_workers=args.nworker, pin_memory=False,
                                                persistent_workers=pers_w, drop_last=True,
+                                               generator=torch.Generator(device=device),
                                                prefetch_factor=args.prefetch, **kwargs)
+
     test_loader = torch.utils.data.DataLoader(dataset = TestDataset([x for x in range(test_len)]), batch_size=2,
                                               sampler=test_sampler, num_workers=args.nworker, pin_memory=False,
                                               persistent_workers=pers_w, drop_last=True,
+                                              generator=torch.Generator(device=device),
                                               prefetch_factor=args.prefetch, **kwargs)
 
     '''train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size,
