@@ -1,6 +1,7 @@
 #import matplotlib.pyplot as plt
 import numpy as np
-import torch
+#import torch
+from deepxde.backend import torch
 import h5py
 from torch import nn
 import argparse
