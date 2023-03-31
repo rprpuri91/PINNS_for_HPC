@@ -66,6 +66,13 @@ class Taylor_green_vortex_PINN(nn.Module):
 
         # layers
         self.linears = nn.ModuleList([nn.Linear(layers[i], layers[i + 1]) for i in range(len(layers) - 1)])
+        
+        self.apply(self._init_weights)
+
+    def _init_weights(self,module):
+        if isinstance(module, nn.Linear):
+            nn.init.xavier_normal_(module.weight.data)
+            nn.init.constant_(module.bias.data, 0)
 
     def forward(self,X):
         if torch.is_tensor(X) != True:
@@ -109,7 +116,7 @@ def scaling(X):
     return x
 
 def h5_loader():
-    h5 = h5py.File('./data/data_Taylor_Green_Vortex_reduced_noNorm.h5', 'r')
+    h5 = h5py.File('./data/data_Taylor_Green_Vortex_reduced_initial01.h5', 'r')
 
     try:
         domain = h5.get('domain')
@@ -159,9 +166,11 @@ def h5_loader():
         print(V_p_train_bottom.shape)'''
 
 
-        train_data = np.vstack([train_domain, train_left, train_right, train_top, train_bottom, train_initial])
-        test_data = np.vstack([test_domain, test_left, test_right, test_top, test_bottom, test_initial])
+        #train_data = np.vstack([train_domain, train_left, train_right, train_top, train_bottom, train_initial])
+        #test_data = np.vstack([test_domain, test_left, test_right, test_top, test_bottom, test_initial])
         
+        train_data = train_initial
+        test_data = test_initial
 
         '''print('########################################')
         for i in range(len(train_data)):
@@ -543,7 +552,8 @@ def total_loss(model, data, device, rho, nu, epoch, batch, grank):
 
     loss_variable = loss_function(predictions, exact)
 
-    loss = loss_continuity + loss_ns1 + loss_ns2 + loss_ps + loss_variable
+    print('loss',loss_variable)
+    #loss = loss_continuity + loss_ns1 + loss_ns2 + loss_ps + loss_variable
     '''if epoch < 1000:
         #loss = loss_continuity + loss_ns1 + loss_ns2 + loss_ps + loss_variable
         loss = loss_continuity + loss_ps + loss_variable
@@ -566,7 +576,7 @@ def total_loss(model, data, device, rho, nu, epoch, batch, grank):
 
    
    
-    return loss
+    return loss_variable
 
 def main():
 
@@ -725,7 +735,7 @@ def main():
     # resume state
     start_epoch = 1
     best_acc = np.Inf
-    res_name = 'checkpoint_red_NC.pth.tar'
+    res_name = 'checkpoint_red_initial01.pth.tar'
     if os.path.isfile(res_name) and not args.benchrun:
         try:
             dist.barrier()
@@ -810,7 +820,7 @@ def main():
             V_p_pred_norm = distrib_model(X_in)
             u_pred, v_pred, p_pred = denormalize(V_p_pred_norm, u_min, u_max, v_min, v_max, p_min, p_max)
             result = [V_p_star,X_in,V_p_pred_norm, u_pred,v_pred, p_pred, loss_acc_list, epoch, lr_graph]
-            f = open('./result/TGV/result_Taylor_green_vortex_reduced_NC_'+str(epoch)+'.pkl', 'wb')
+            f = open('./result/TGV/result_Taylor_green_vortex_reduced_initial01_'+str(epoch)+'.pkl', 'wb')
             pickle.dump(result, f)
             f.close()
 
@@ -843,7 +853,7 @@ def main():
         print(f'TIMER: final time: {f_time} s')
 
     result = [V_p_star, X_in, V_p_pred_norm, u_pred, v_pred, p_pred, loss_acc_list, acc_test, lr_graph]
-    f = open('./result/result_Taylor_green_vortex_reduced_NC_'+str(args.epochs)+'.pkl', 'wb')
+    f = open('./result/result_Taylor_green_vortex_reduced_initial01_'+str(args.epochs)+'.pkl', 'wb')
 
     pickle.dump(result, f)
     f.close()
