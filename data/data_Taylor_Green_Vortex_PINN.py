@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import h5py
-
+from sklearn.preprocessing import MinMaxScaler
 import sys, os, time, random, shutil
 
 
@@ -16,11 +16,11 @@ class Preprocessing_Taylor_Green():
         self.nu = nu
         self.n = n
 
-        x_values = np.arange(0, 2*np.pi, 0.5).tolist()
-        y_values = np.arange(0, 2*np.pi, 0.5).tolist()
+        x_values = np.arange(0, np.pi, 0.4).tolist()
+        y_values = np.arange(0, np.pi, 0.4).tolist()
         t = np.arange(0, 1, 0.1)
-        x_values.append(2*np.pi)
-        y_values.append(2*np.pi)
+        x_values.append(np.pi)
+        y_values.append(np.pi)
 
         x,y = np.meshgrid(x_values, y_values)
         #y0,x0 = np.meshgrid(y_values, x_values)
@@ -36,6 +36,8 @@ class Preprocessing_Taylor_Green():
         Xpi = np.zeros(y1.flatten().shape)
         Xpi[:] = np.pi
         t0 = np.zeros((x.flatten().shape))
+        t01 = np.zeros((x.flatten().shape))
+        t01[:] = t[1]
         center = np.zeros(t.flatten().shape)
         center[:] = np.pi/2
 
@@ -52,6 +54,8 @@ class Preprocessing_Taylor_Green():
 
 
         self.X_initial = np.vstack([x.flatten(), y.flatten(), t0]).T
+        self.X_1 = np.vstack([x.flatten(), y.flatten(), t01]).T
+        self.X_initial_01 = np.vstack([self.X_initial, self.X_1])
         self.X_bottom = np.vstack([x1.flatten(), X0, t1.flatten()]).T
         self.X_top = np.vstack([x1.flatten(), Xpi, t1.flatten()]).T
         self.X_left = np.vstack([X0, x1.flatten(), t1.flatten()]).T
@@ -63,6 +67,8 @@ class Preprocessing_Taylor_Green():
 
         self.l1 = len(x.flatten())
 
+        print('X1',self.X_1.shape)
+        print('X_initial',self.X_initial_01.shape)
         '''print(self.u_center)
         print(self.v_center)'''
 
@@ -87,8 +93,8 @@ class Preprocessing_Taylor_Green():
         for i in range(len(X)):
             f = -2*self.nu*X[i][2]
             F = np.exp(f)
-            u0 = np.cos(X[i][0])*np.sin(X[i][1])*F
-            v0 = -np.sin(X[i][0])*np.cos(X[i][1])*F
+            u0 = -np.cos(X[i][0])*np.sin(X[i][1])*F
+            v0 = np.sin(X[i][0])*np.cos(X[i][1])*F
             #U0 = [u0,v0]
             u.append(u0)
             v.append(v0)
@@ -139,19 +145,31 @@ class Preprocessing_Taylor_Green():
 
         idx = np.random.choice(X.shape[0], N, replace=False)
 
+        idx2a=[]
+        idx2b=[]
+
+        for i in range(0, len(X)):
+            if i%10 == 0:
+                idx2b.append(i)
+            else:
+                idx2a.append(i)
+
         X_train = X[idx,:]
 
         X_test = np.delete(X, idx, axis=0)
 
-        u_train, v_train = self.velocity(X_train)
-        u_test, v_test = self.velocity(X_test)
+        X_train1 = X[idx2a]
+        X_test1 = X[idx2b]
 
-        p_train = self.pressure(X_train)
-        p_test = self.pressure(X_test)
+        u_train, v_train = self.velocity(X_train1)
+        u_test, v_test = self.velocity(X_test1)
 
-        u_train_norm, v_train_norm, p_train_norm = self.normalize(u_train, v_train,p_train)
+        p_train = self.pressure(X_train1)
+        p_test = self.pressure(X_test1)
 
-        u_test_norm, v_test_norm, p_test_norm = self.normalize(u_test, v_test, p_test)
+        #u_train_norm, v_train_norm, p_train_norm = self.normalize(u_train, v_train,p_train)
+
+        #u_test_norm, v_test_norm, p_test_norm = self.normalize(u_test, v_test, p_test)
 
         if flag == "domain":
             flag_mark = 1
@@ -160,14 +178,14 @@ class Preprocessing_Taylor_Green():
         elif flag == "initial":
             flag_mark = 0
 
-        flag_train = torch.full((u_train_norm.shape), flag_mark)
-        flag_test = torch.full((u_test_norm.shape), flag_mark)
+        flag_train = torch.full((u_train.shape), flag_mark)
+        flag_test = torch.full((u_test.shape), flag_mark)
 
-        V_p_train = np.vstack([u_train_norm, v_train_norm, p_train_norm, flag_train])
-        V_p_test = np.vstack([u_test_norm, v_test_norm, p_test_norm, flag_test])
+        V_p_train = np.vstack([u_train, v_train, p_train, flag_train])
+        V_p_test = np.vstack([u_test, v_test, p_test, flag_test])
 
 
-        return V_p_train.T, X_train, V_p_test.T, X_test
+        return V_p_train.T, X_train1, V_p_test.T, X_test1
 
     def data_generation(self):
 
@@ -184,7 +202,7 @@ class Preprocessing_Taylor_Green():
         V_p_train_right, X_train_right, V_p_test_right, X_test_right = self.train_test(self.X_right, "right")
         V_p_train_top, X_train_top, V_p_test_top, X_test_top = self.train_test(self.X_top, "top")
         V_p_train_bottom, X_train_bottom, V_p_test_bottom, X_test_bottom = self.train_test(self.X_bottom, "bottom")
-        V_p_train_initial, X_train_initial, V_p_test_initial, X_test_initial = self.train_test(self.X_initial, "initial")
+        V_p_train_initial, X_train_initial, V_p_test_initial, X_test_initial = self.train_test(self.X_initial_01, "initial")
 
 
         domain_train = np.hstack([X_train_domain,V_p_train_domain])
@@ -205,17 +223,26 @@ class Preprocessing_Taylor_Green():
         initial_train = np.hstack([X_train_initial, V_p_train_initial])
         initial_test = np.hstack([X_test_initial, V_p_test_initial])
 
-        u0 = initial_train[:,3]
-        v0 = initial_train[:,4]
+        u0 = initial_train[:,3][:self.l1]
+        v0 = initial_train[:,4][:self.l1]
 
         U_grid = np.sqrt(np.square(u0) + np.square(v0))
 
-        plt.quiver(initial_train[:, 0], initial_train[:, 1], u0, v0, U_grid, scale=30)
+        plt.quiver(initial_train[:, 0][:self.l1], initial_train[:, 1][:self.l1], u0, v0, U_grid, scale=30)
         plt.colorbar()
+
+        fig, ax = plt.subplots(1,2)
+        ax[0].scatter(np.arange(0, len(self.X_initial_01)),self.pressure(self.X_initial_01))
+        ax[1].scatter(np.arange(0,len(initial_train)),initial_train[:,5])
+
         plt.show()
 
         self.V_p_star = np.vstack([self.u_star, self.v_star, self.p_star])
         V_p_center = np.vstack([self.u_center, self.v_center, self.p_center])
+
+        u_initial, v_initial = self.velocity(self.X_initial)
+        p_initial = self.pressure(self.X_initial)
+        V_p_initial = np.vstack([u_initial,v_initial, p_initial])
 
         center_data = np.hstack([self.X_center, V_p_center.T])
 
@@ -226,7 +253,7 @@ class Preprocessing_Taylor_Green():
         print(X_train_domain)
         print(X_test_domain.shape)'''
 
-        h5 = h5py.File('data_Taylor_Green_Vortex_reduced.h5', 'w')
+        h5 = h5py.File('data_Taylor_Green_Vortex_reduced_initial01.h5', 'w')
         g1 = h5.create_group('domain')
         g1.create_dataset('data1', data=domain_train)
         g1.create_dataset('data2', data=domain_test)
@@ -255,8 +282,8 @@ class Preprocessing_Taylor_Green():
         g7.create_dataset('data1', data=center_data)
 
         g8 = h5.create_group('full')
-        g8.create_dataset('data1', data=self.X_in)
-        g8.create_dataset('data2', data=self.V_p_star.T)
+        g8.create_dataset('data1', data=self.X_initial)
+        g8.create_dataset('data2', data=V_p_initial.T)
 
         h5.close()
 
@@ -267,7 +294,7 @@ def main():
 
     preprocessing = Preprocessing_Taylor_Green(rho, nu, n)
     preprocessing.data_generation()
-    X_initial = preprocessing.X_initial
+    X_initial = preprocessing.X_initial_01
     u_initial, v_initial =preprocessing.velocity(X_initial)
     p_initial = preprocessing.pressure(X_initial)
     #plotting(X_initial, u_initial, v_initial, p_initial)
@@ -283,18 +310,18 @@ def plotting(X, u, v, p):
     u_max = u.max()
     v_max = v.max()
     scale = (u_max + v_max)/(2* p_max)
-    p0 = (-1 + 2*((p -p_min) / (p_max - p_min)))/scale
+    #p0 = (-1 + 2*((p -p_min) / (p_max - p_min)))/scale
 
     print(u0.shape)
 
     U_grid = np.sqrt(np.square(u0) + np.square(v0))
 
-    x_grid = np.reshape(X_l[:,0], (14,14))
-    y_grid = np.reshape(X_l[:,1], (14,14))
+    x_grid = np.reshape(X_l[:,0], (18,9))
+    y_grid = np.reshape(X_l[:,1], (18,9))
 
-    u_grid = np.reshape(u0, (14,14))
-    v_grid = np.reshape(v0, (14,14))
-    p_grid = np.reshape(p0, (14,14))
+    u_grid = np.reshape(u0, (18,9))
+    v_grid = np.reshape(v0, (18,9))
+    p_grid = np.reshape(p0, (18,9))
 
     u_grid_max = u_grid.max()
     u_grid_min = u_grid.min()
