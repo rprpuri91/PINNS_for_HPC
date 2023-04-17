@@ -7,13 +7,16 @@ import argparse
 import sys, os, time, random, shutil
 import torch.distributed as dist
 import pickle
+import deepxde as dde
+from torch.utils.data import Dataset
+
 
 torch.manual_seed(1234)
 
 np.random.seed(1234)
 
 def h5_loader(path):
-    h5 = h5py.File('./data/data_Taylor_Green_Vortex.h5', 'r')
+    h5 = h5py.File('./data/data_Taylor_Green_Vortex_reduced_initial.h5', 'r')
 
     try:
         domain = h5.get('domain')
@@ -21,41 +24,33 @@ def h5_loader(path):
         right = h5.get('right')
         top = h5.get('top')
         bottom = h5.get('bottom')
+        initial = h5.get('initial')
+        center = h5.get('center')
         full = h5.get('full')
 
+        train_domain = np.array(domain.get('data1'))
+        test_domain = np.array(domain.get('data2'))
 
-        X_train_domain = np.array(domain.get('data1'))
-        V_p_train_domain = np.array(domain.get('data2'))
-        X_test_domain = np.array(domain.get('data3'))
-        V_p_test_domain = np.array(domain.get('data4'))
+        train_left = np.array(left.get('data1'))
+        test_left = np.array(left.get('data2'))
 
-        X_train_left = np.array(left.get('data1'))
-        V_p_train_left = np.array(left.get('data2'))
-        X_test_left = np.array(left.get('data3'))
-        V_p_test_left = np.array(left.get('data4'))
+        train_right = np.array(right.get('data1'))
+        test_right = np.array(right.get('data2'))
 
-        X_train_right = np.array(right.get('data1'))
-        V_p_train_right = np.array(right.get('data2'))
-        X_test_right = np.array(right.get('data3'))
-        V_p_test_right = np.array(right.get('data4'))
+        train_top = np.array(top.get('data1'))
+        test_top = np.array(top.get('data2'))
 
-        X_train_top = np.array(top.get('data1'))
-        V_p_train_top = np.array(top.get('data2'))
-        X_test_top = np.array(top.get('data3'))
-        V_p_test_top = np.array(top.get('data4'))
+        train_bottom = np.array(bottom.get('data1'))
+        test_bottom = np.array(bottom.get('data2'))
 
-        X_train_bottom = np.array(bottom.get('data1'))
-        V_p_train_bottom = np.array(bottom.get('data2'))
-        X_test_bottom = np.array(bottom.get('data3'))
-        V_p_test_bottom = np.array(bottom.get('data4'))
+        train_initial = np.array(initial.get('data1'))
+        test_initial = np.array(initial.get('data2'))
 
-        X_in = np.array(full.get('data1'))
-        u_star = np.array(full.get('data2'))
-        v_star = np.array(full.get('data3'))
-        p_star = np.array(full.get('data4'))
+        center_data = np.array(center.get('data1'))
 
-        V_p_star = np.vstack([u_star, v_star, p_star])
-        V_p_star = V_p_star.T
+        X_initial = np.array(full.get('data1'))
+        V_p_initial = np.array(full.get('data2'))
+
         #print('star',V_p_star)
         '''print(X_train_domain.shape)
         print(X_train_left.shape)
@@ -68,15 +63,16 @@ def h5_loader(path):
         print(V_p_train_top.shape)
         print(V_p_train_bottom.shape)'''
 
-        X_train = np.vstack([X_train_domain, X_train_left, X_train_right, X_train_top, X_train_bottom])
-        X_test = np.vstack([X_test_domain, X_test_left, X_test_right, X_test_top, X_test_bottom])
-        V_p_train = np.vstack([V_p_train_domain, V_p_train_left, V_p_train_right, V_p_train_top,V_p_train_bottom])
-        V_p_test = np.vstack([V_p_test_domain, V_p_test_left, V_p_test_right, V_p_test_top, V_p_test_bottom])
+        train_data_initial = np.vstack([train_initial])
+        test_data_initial = np.vstack([test_initial])
+
+        train_data_bc = np.vstack([train_left, train_right, train_top, train_bottom])
+        test_data_bc = np.vstack([test_left, test_right, test_top, test_bottom])
 
     except Exception as e:
         print(e)
 
-    return X_train, V_p_train, X_test, V_p_test, X_in, V_p_star
+    return train_data_initial, test_data_initial, train_data_bc, test_data_bc, X_initial, V_p_initial
 
 def pars_ini():
     global args
@@ -89,7 +85,7 @@ def pars_ini():
 
     #model
     parser.add_argument('--batch-size', type=int, default=16, help='input batch size for training (default: 16)')
-    parser.add_argument('--epochs', type=int, default=1000, help='number of training epochs (default: 10)')
+    parser.add_argument('--epochs', type=int, default=1, help='number of training epochs (default: 10)')
     parser.add_argument('--lr', type=float, default=0.001, help='learning rate (default: 0.001)')
     parser.add_argument('--wdecay', type=float, default=0.003, help='weight decay in ADAM (default: 0.003)')
     parser.add_argument('--gamma', type=float, default=0.95,
@@ -138,7 +134,7 @@ class Taylor_green_vortex_PINN(nn.Module):
             X = torch.from_numpy(X)
 
 
-        x = self.scaling(X)
+        x = scaling(X)
         # convert to float
         a = x.float()
 
@@ -164,7 +160,39 @@ class Taylor_green_vortex_PINN(nn.Module):
 
         return a
 
-def scaling(self, X):
+
+class InitialTrainDataset(Dataset):
+
+    def __init__(self, list_id):
+        self.train_data_initial, _, _, _, _, _ = h5_loader()
+        self.len = len(self.train_data_initial)
+
+    def __getitem__(self, index):
+        data0 = self.train_data_initial[index]
+        data = torch.from_numpy(data0).float()
+        return data
+
+    def __len__(self):
+        return self.len
+
+
+class InitialTestDataset(Dataset):
+
+    def __init__(self, list_id):
+        _, self.test_data_initial, _, _, _, _ = h5_loader()
+        self.len = len(self.test_data_initial)
+
+    def __getitem__(self, index):
+        data0 = self.test_data_initial[index]
+        data = torch.from_numpy(data0).float()
+        return data
+
+    def __len__(self):
+        return self.len
+
+
+
+def scaling(X):
 
     mean, std, var = torch.mean(X), torch.std(X), torch.var(X)
     # preprocessing input
@@ -279,7 +307,7 @@ def pred_hessian_v(x,y,t):
     predictions = distrib_model(g)
     return predictions[:,1].sum()
 
-def total_loss(data, device, rho, nu):
+def total_loss(model, data, device, rho, nu):
 
     loss_function = nn.MSELoss()
 
@@ -290,60 +318,32 @@ def total_loss(data, device, rho, nu):
 
     exact = data[1]
 
-    v1 = torch.zeros_like(inputs, device = device)
-    v2 = torch.zeros_like(inputs, device = device)
-    v3 = torch.zeros_like(inputs, device = device)
+    outputs = model(inputs)
 
-    v1[:,0] = 1
-    v2[:,1] = 1
-    v3[:,2] = 1
+    u = outputs[:, 0]
+    v = outputs[:, 1]
+    p = outputs[:, 2]
 
-    X = torch.split(inputs, 1, dim=1)
-    x = X[0]
-    y = X[1]
-    t = X[2]
+    ux = dde.grad.jacobian(outputs, inputs, i=0, j=0)
+    uy = dde.grad.jacobian(outputs, inputs, i=0, j=1)
+    ut = dde.grad.jacobian(outputs, inputs, i=0, j=2)
 
-    v4 = torch.ones_like(x, device=device)
-    '''print(x.shape)
-    print(y.shape)
-    print(t.shape)'''
+    vx = dde.grad.jacobian(outputs, inputs, i=1, j=0)
+    vy = dde.grad.jacobian(outputs, inputs, i=1, j=1)
+    vt = dde.grad.jacobian(outputs, inputs, i=1, j=2)
 
-    predictions, du = torch.autograd.functional.vjp(prediction, (x, y, t), v1, create_graph=True)
-    ux = du[0]
-    uy = du[1]
-    ut = du[2]
+    px = dde.grad.jacobian(outputs, inputs, i=2, j=0)
+    py = dde.grad.jacobian(outputs, inputs, i=2, j=1)
 
-    u_x_y = torch.cat((ux,uy), dim=1)
+    u_xx = dde.grad.hessian(outputs, inputs, component=0, i=0, j=0)
+    u_yy = dde.grad.hessian(outputs, inputs, component=0, i=1, j=1)
 
-    u = predictions[:,0]
-    v = predictions[:,1]
-    p = predictions[:,2]
+    v_xx = dde.grad.hessian(outputs, inputs, component=1, i=0, j=0)
+    v_yy = dde.grad.hessian(outputs, inputs, component=1, i=1, j=1)
 
-    predictions1, dv = torch.autograd.functional.vjp(prediction, (x, y, t), v2, create_graph=True)
-    vx = dv[0]
-    vy = dv[1]
-    vt = dv[2]
+    #p_xx = dde.grad.hessian(outputs, inputs, component=2, i=0, j=0)
+    #p_yy = dde.grad.hessian(outputs, inputs, component=2, i=1, j=1)
 
-    v_x_y = torch.cat((vx,vy), dim=1)
-
-    predictions2, dp = torch.autograd.functional.vjp(prediction, (x, y, t), v3, create_graph=True)
-    px = dp[0]
-    py = dp[1]
-    pt = dp[2]
-
-    v4 = torch.ones_like(x)
-    v5 = torch.zeros_like(x)
-    C, H_u = torch.autograd.functional.vhp(pred_hessian_u, (x,y,t), (v4,v4,v5))
-
-    C, H_v = torch.autograd.functional.vhp(pred_hessian_v, (x, y, t), (v4, v4, v5))
-
-    u_xx = H_u[0]
-    u_yy = H_u[1]
-    v_xx = H_v[0]
-    v_yy = H_v[1]
-
-    #dv2_dx2 = torch.autograd.grad(vx, x, torch.ones(x.shape[0], 1).to(device), create_graph=True)
-    #dv2_dy2 = torch.autograd.grad(vy, y, torch.ones(y.shape[0], 1).to(device), create_graph=True)
 
     continuity = ux + vy
     ns1 = ut + u*ux + v*uy + (1/rho)*px - nu*(u_xx + u_yy)
@@ -357,7 +357,7 @@ def total_loss(data, device, rho, nu):
     loss_ns1 = loss_function(ns1, target2)
     loss_ns2 = loss_function(ns2, target3)
 
-    loss_variable = loss_function(predictions, exact)
+    loss_variable = loss_function(outputs, exact)
 
     return loss_continuity + loss_ns1 + loss_ns2 + loss_variable
 
@@ -369,7 +369,7 @@ def denormalize(self, V_p_norm, u_min, u_max, v_min, v_max, p_min, p_max):
     v = ((v_norm + 1) * (v_max - v_min) / 2) + v_min
     p = ((p_norm + 1) * (p_max - p_min) / 2) + p_min
 
-    return u, v, p
+    return u_norm, v_norm, p_norm
 
 def main():
 
@@ -436,34 +436,28 @@ def main():
         if args.testrun:
             torch.cuda.manual_seed(args.nseed)
 
-    X_train, V_p_train, X_test, V_p_test, X_in, V_p_star = h5_loader(args.data_dir)
+    train_data_initial, test_data_initial, train_data_bc, test_data_bc, X_initial, V_p_initial = h5_loader(args.data_dir)
 
-    u_min = V_p_star[:,0].min()
-    u_max = V_p_star[:,0].max()
-    v_min = V_p_star[:,1].min()
-    v_max = V_p_star[:,1].max()
-    p_min = V_p_star[:,2].min()
-    p_max = V_p_star[:,2].max()
-
-    X_train = torch.from_numpy(X_train).float().to(device)
-    X_test = torch.from_numpy(X_test).float().to(device)
-    V_p_train = torch.from_numpy(V_p_train).float().to(device)
-    V_p_test = torch.from_numpy(V_p_test).float().to(device)
-
-    tensors1 = [X_train,V_p_train]
-    tensors2 = [X_test,V_p_test]
+    u_min = V_p_initial[:,0].min()
+    u_max = V_p_initial[:,0].max()
+    v_min = V_p_initial[:,1].min()
+    v_max = V_p_initial[:,1].max()
+    p_min = V_p_initial[:,2].min()
+    p_max = V_p_initial[:,2].max()
 
     # create dataset
-    train_dataset = torch.utils.data.TensorDataset(*tensors1)
-    test_dataset = torch.utils.data.TensorDataset(*tensors2)
-    X_in = torch.from_numpy(X_in).float().to(device)
+
+    X_initial = torch.from_numpy(X_initial).float().to(device)
+
+    train_len = len(train_data_initial)
+    test_len = len(test_data_initial)
 
     # restricts data loading to a subset of the dataset exclusive to the current process
     args.shuff = args.shuff and not args.testrun
-    train_sampler = torch.utils.data.distributed.DistributedSampler(
-        train_dataset, num_replicas=gwsize, rank=grank, shuffle=args.shuff)
-    test_sampler = torch.utils.data.distributed.DistributedSampler(
-        test_dataset, num_replicas=gwsize, rank=grank, shuffle=args.shuff)
+    train_sampler = torch.utils.data.distributed.DistributedSampler(dataset=InitialTrainDataset([x for x in range(train_len)]),
+                                                                    num_replicas=gwsize, rank=grank, shuffle=True)
+    test_sampler = torch.utils.data.distributed.DistributedSampler(dataset=InitialTestDataset([x for x in range(test_len)]),
+                                                                   num_replicas=gwsize, rank=grank, shuffle=True)
 
     # distribute dataset to workers
     # persistent workers
@@ -471,14 +465,18 @@ def main():
 
     kwargs = {'worker_init_fn': seed_worker, 'generator': g} if args.testrun else {}
 
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size,
-                                               sampler = train_sampler,
-                                               num_workers=args.nworker, pin_memory=True,
+    train_loader = torch.utils.data.DataLoader(dataset=InitialTrainDataset([x for x in range(train_len)]),
+                                               batch_size=args.batch_size,
+                                               sampler=train_sampler,
+                                               num_workers=args.nworker, pin_memory=False,
                                                persistent_workers=pers_w, drop_last=True,
+                                               generator=torch.Generator(device=device),
                                                prefetch_factor=args.prefetch, **kwargs)
-    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=2, sampler = test_sampler,
-                                              num_workers=args.nworker, pin_memory=True,
+
+    test_loader = torch.utils.data.DataLoader(dataset=InitialTestDataset([x for x in range(test_len)]), batch_size=2,
+                                              sampler=test_sampler, num_workers=args.nworker, pin_memory=False,
                                               persistent_workers=pers_w, drop_last=True,
+                                              generator=torch.Generator(device=device),
                                               prefetch_factor=args.prefetch, **kwargs)
 
 
@@ -539,13 +537,13 @@ def main():
         lt = time.time()
         loss_acc = 0.0
         count = 0
-        for data in train_loader:
-            if count%1000 ==0:
+        for batch_idx, (data) in enumerate(train_loader):
+            if count%1000 ==0 and grank == 0:
                 print('Batch: ',count)
             optimizer.zero_grad()
             #predictions = distrib_model(inputs)
 
-            loss = total_loss(data, device, rho,nu)
+            loss = total_loss(distrib_model,data, device, rho,nu)
 
             loss.backward()
             optimizer.step()
@@ -558,16 +556,16 @@ def main():
 
         if grank == 0 and lrank == 0:
             loss_acc_list.append(loss_acc)
-        if epoch%10 == 0:
-            print('train_loss: ',loss)
+
 
         # if a better state is found
         is_best = loss_acc < best_acc
         if epoch % args.restart_int == 0 and not args.benchrun:
             save_state(epoch, model, loss_acc, optimizer, res_name, grank, gwsize, is_best)
+            X_in = scaling(X_initial)
             V_p_pred_norm = distrib_model(X_in)
             u_pred,v_pred,p_pred = denormalize(V_p_pred_norm, u_min, u_max, v_min, v_max, p_min, p_max)
-            result = [V_p_star,u_pred, v_pred,p_pred, loss_acc_list, epoch]
+            result = [V_p_initial,u_pred, v_pred,p_pred, loss_acc_list, epoch]
             f = open('result_Taylor_green_vortex.pkl', 'wb')
             pickle.dump(result, f)
             f.close()
@@ -617,7 +615,7 @@ def main():
             #print(data)
             inputs = data[0]
 
-            loss = total_loss(data, device, rho,nu)
+            loss = total_loss(distrib_model,data, device, rho,nu)
 
             test_loss+= loss.item()/inputs.shape[0]
 
@@ -630,7 +628,7 @@ def main():
     print(f'TIMER: total testing time: {time.time() - et} s')
 
     # finalise testing
-
+    X_in = scaling(X_initial)
     V_p_pred_norm = distrib_model(X_in)
     u_pred, v_pred, p_pred = denormalize(V_p_pred_norm, u_min, u_max, v_min, v_max, p_min, p_max)
 
@@ -638,7 +636,7 @@ def main():
         f_time = time.time() - st
         print(f'TIMER: final time: {f_time} s')
 
-    result = [V_p_star, u_pred, v_pred, p_pred, loss_acc_list,test_loss_acc, f_time]
+    result = [V_p_initial, u_pred, v_pred, p_pred, loss_acc_list,test_loss_acc, f_time]
     f = open('result_Taylor_green_vortex.pkl', 'wb')
     pickle.dump(result, f)
     f.close()
