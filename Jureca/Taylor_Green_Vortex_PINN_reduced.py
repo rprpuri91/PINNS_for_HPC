@@ -108,7 +108,7 @@ def scaling(X):
     return x
 
 def h5_loader():
-    h5 = h5py.File('../data/data_Taylor_Green_Vortex_reduced.h5', 'r')
+    h5 = h5py.File('./data/S2S/data_Taylor_Green_Vortex_reduced_01.h5', 'r')
 
     try:
         domain = h5.get('domain')
@@ -116,10 +116,7 @@ def h5_loader():
         right = h5.get('right')
         top = h5.get('top')
         bottom = h5.get('bottom')
-        initial = h5.get('initial')
-        center = h5.get('center')
         full = h5.get('full')
-
 
         train_domain = np.array(domain.get('data1'))
         test_domain = np.array(domain.get('data2'))
@@ -136,18 +133,10 @@ def h5_loader():
         train_bottom = np.array(bottom.get('data1'))
         test_bottom = np.array(bottom.get('data2'))
 
-        train_initial = np.array(initial.get('data1'))
-        test_initial = np.array(initial.get('data2'))
-
-        center_data = np.array(center.get('data1'))
-
         X_in = np.array(full.get('data1'))
-        V_p_star = np.array(full.get('data2'))
+        V_p_in = np.array(full.get('data2'))
 
-        plt.quiver(train_left[:, 0], train_left[:, 1], train_left[:, 3], train_left[:, 4], scale=30)
-        plt.show()
-
-        #print(V_p_star)
+        # print(V_p_star)
 
         '''print(X_train_domain.shape)
         print(X_train_left.shape)
@@ -160,22 +149,21 @@ def h5_loader():
         print(V_p_train_top.shape)
         print(V_p_train_bottom.shape)'''
 
+        train_data = np.vstack([train_domain, train_left, train_right, train_top, train_bottom])
+        test_data = np.vstack([test_domain, test_left, test_right, test_top, test_bottom])
 
-        train_data = np.vstack([train_domain, train_left, train_right, train_top, train_bottom, train_initial, center_data])
-        test_data = np.vstack([test_domain, test_left, test_right, test_top, test_bottom, test_initial])
-        
-
+        print('train', train_data.shape)
+        print('test', test_data.shape)
         '''print('########################################')
         for i in range(len(train_data)):
             print(train_data[i])
             print("\n")
-
         print('#######################################')
         '''
     except Exception as e:
         print(e)
 
-    return train_data, test_data, X_in, V_p_star
+    return train_data, test_data, X_in, V_p_in
 
 class GenerateDataset(Dataset):
 
@@ -245,9 +233,12 @@ def test(model, device, test_loader, grank, gwsize, rho, nu):
         for data in test_loader:
             # print(data)
 
-            inputs = data[0]
+            inputs = data[:,0:3].to(device)
 
-            loss = total_loss(model, data, device, rho, nu)
+            outputs = model(inputs)
+            exact = data[:, 3:].to(device)
+
+            loss = nn.MSELoss(outputs, exact)
 
             test_loss += loss.item() / inputs.shape[0]
 
@@ -724,11 +715,11 @@ def main():
     # clean-up
     dist.destroy_process_group()
 
-'''if __name__ == "__main__":
+if __name__ == "__main__":
     main()
-    sys.exit()'''
+    sys.exit()
 
-h5_loader()
+#h5_loader()
 
 
 
