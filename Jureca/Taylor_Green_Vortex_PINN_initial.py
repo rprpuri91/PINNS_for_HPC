@@ -111,7 +111,7 @@ def scaling(X):
     return x
 
 def h5_loader():
-    h5 = h5py.File('./data/data_Taylor_Green_Vortex_reduced_noNorm.h5', 'r')
+    h5 = h5py.File('./data/data_Taylor_Green_Vortex_reduced_01.h5', 'r')
 
     try:
         domain = h5.get('domain')
@@ -119,10 +119,7 @@ def h5_loader():
         right = h5.get('right')
         top = h5.get('top')
         bottom = h5.get('bottom')
-        initial = h5.get('initial')
-        center = h5.get('center')
         full = h5.get('full')
-
 
         train_domain = np.array(domain.get('data1'))
         test_domain = np.array(domain.get('data2'))
@@ -139,15 +136,10 @@ def h5_loader():
         train_bottom = np.array(bottom.get('data1'))
         test_bottom = np.array(bottom.get('data2'))
 
-        train_initial = np.array(initial.get('data1'))
-        test_initial = np.array(initial.get('data2'))
+        X_in = np.array(full.get('data1'))
+        V_p_in = np.array(full.get('data2'))
 
-        center_data = np.array(center.get('data1'))
-
-        X_initial = np.array(full.get('data1'))
-        V_p_initial = np.array(full.get('data2'))
-
-        #print(V_p_star)
+        # print(V_p_star)
 
         '''print(X_train_domain.shape)
         print(X_train_left.shape)
@@ -160,13 +152,11 @@ def h5_loader():
         print(V_p_train_top.shape)
         print(V_p_train_bottom.shape)'''
 
+        train_data = np.vstack([train_domain, train_left, train_right, train_top, train_bottom])
+        test_data = np.vstack([test_domain, test_left, test_right, test_top, test_bottom])
 
-        train_data = np.vstack([train_initial])
-        test_data = np.vstack([test_initial])
-        
-        #train_data = torch.from_numpy(train_data).float().to(device)
-        #test_data = torch.from_numpy(test_data).float().to(device)
-
+        print('train', train_data.shape)
+        print('test', test_data.shape)
         '''print('########################################')
         for i in range(len(train_data)):
             print(train_data[i])
@@ -177,7 +167,7 @@ def h5_loader():
     except Exception as e:
         print(e)
 
-    return train_data, test_data, X_initial, V_p_initial
+    return train_data, test_data, X_in, V_p_in
 
 class GenerateDataset(Dataset):
 
@@ -681,8 +671,8 @@ def main():
     p_min = V_p_initial[:,2].min()
     p_max = V_p_initial[:,2].max()
 
-    rho = 1.2
-    nu = 1.516e-5
+    rho = 1
+    nu = 0.1
 
     X_initial = torch.from_numpy(X_initial).float().to(device)
 
