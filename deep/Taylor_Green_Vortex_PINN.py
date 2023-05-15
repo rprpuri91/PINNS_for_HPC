@@ -643,6 +643,7 @@ def main():
     # clean-up
     dist.destroy_process_group()
 
+
 if __name__ == "__main__":
     main()
     sys.exit()
