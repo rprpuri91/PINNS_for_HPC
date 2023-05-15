@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import h5py
+import re
 from sklearn.preprocessing import MinMaxScaler
 import sys, os, time, random, shutil
 
@@ -172,7 +173,7 @@ class Preprocessing_Taylor_Green():
 
         #u_test, v_test, p_test = self.normalize(u_test, v_test, p_test)
 
-        if flag == "domain":
+        '''if flag == "domain":
             flag_mark = 1
         elif flag == "left" or flag == "right" or flag == "top" or flag == "bottom":
             flag_mark = 2
@@ -180,17 +181,20 @@ class Preprocessing_Taylor_Green():
             flag_mark = 0
 
         flag_train = torch.full((u_train.shape), flag_mark)
-        flag_test = torch.full((u_test.shape), flag_mark)
+        flag_test = torch.full((u_test.shape), flag_mark)'''
 
-        V_p_train = np.vstack([u_train, v_train, p_train, flag_train])
-        V_p_test = np.vstack([u_test, v_test, p_test, flag_test])
+        V_p_train = np.vstack([u_train, v_train, p_train])
+        V_p_test = np.vstack([u_test, v_test, p_test])
 
 
         return V_p_train.T, X_train1, V_p_test.T, X_test1
 
     def data_generation(self):
 
-        X_in1 = self.X_in[self.l1:]
+        t1 = 4*self.l1
+        t2 = 6*self.l1
+
+        X_in1 = self.X_in[t1:t2]
 
         N2 = int(0.3 * len(X_in1))
 
@@ -199,13 +203,16 @@ class Preprocessing_Taylor_Green():
 
 
         V_p_train_domain, X_train_domain, V_p_test_domain, X_test_domain = self.train_test(X_domain, "domain")
-        V_p_train_left, X_train_left, V_p_test_left, X_test_left = self.train_test(self.X_left[:2*self.l1], "left")
-        V_p_train_right, X_train_right, V_p_test_right, X_test_right = self.train_test(self.X_right[:2*self.l1], "right")
-        V_p_train_top, X_train_top, V_p_test_top, X_test_top = self.train_test(self.X_top[:2*self.l1], "top")
-        V_p_train_bottom, X_train_bottom, V_p_test_bottom, X_test_bottom = self.train_test(self.X_bottom[:2*self.l1], "bottom")
-        V_p_train_initial, X_train_initial, V_p_test_initial, X_test_initial = self.train_test(self.X_initial_01, "initial")
+        V_p_train_left, X_train_left, V_p_test_left, X_test_left = self.train_test(self.X_left[t1:t2], "left")
+        V_p_train_right, X_train_right, V_p_test_right, X_test_right = self.train_test(self.X_right[t1:t2], "right")
+        V_p_train_top, X_train_top, V_p_test_top, X_test_top = self.train_test(self.X_top[t1:t2], "top")
+        V_p_train_bottom, X_train_bottom, V_p_test_bottom, X_test_bottom = self.train_test(self.X_bottom[t1:t2], "bottom")
+        #V_p_train_full, X_train_full, V_p_test_full, X_test_full = self.train_test(X_in1, "full")
 
-        print(self.X_top[:2*self.l1])
+        #print(self.X_top[:2*self.l1])
+        #print(self.X_initial_01[:,2])
+        plt.plot(self.X_left[t1:t2][:,2])
+        plt.show()
 
         domain_train = np.hstack([X_train_domain,V_p_train_domain])
         domain_test = np.hstack([X_test_domain, V_p_test_domain])
@@ -222,29 +229,29 @@ class Preprocessing_Taylor_Green():
         bottom_train = np.hstack([X_train_bottom, V_p_train_bottom])
         bottom_test = np.hstack([X_test_bottom, V_p_test_bottom])
 
-        initial_train = np.hstack([X_train_initial, V_p_train_initial])
-        initial_test = np.hstack([X_test_initial, V_p_test_initial])
+        #full_train = np.hstack([X_train_full, V_p_train_full])
+        #full_test = np.hstack([X_test_full, V_p_test_full])
 
-        u0 = initial_train[:,3][:self.l1]
-        v0 = initial_train[:,4][:self.l1]
+        u0 = domain_train[:,3]
+        v0 = domain_train[:,4]
 
         U_grid = np.sqrt(np.square(u0) + np.square(v0))
 
-        plt.quiver(initial_train[:, 0][:self.l1], initial_train[:, 1][:self.l1], u0, v0, U_grid, scale=30)
+        plt.quiver(domain_train[:, 0], domain_train[:, 1][:self.l1], u0, v0, U_grid, scale=30)
         plt.colorbar()
 
         fig, ax = plt.subplots(1,2)
-        ax[0].scatter(np.arange(0, len(self.X_initial_01)),self.pressure(self.X_initial_01))
-        ax[1].scatter(np.arange(0,len(initial_train)),initial_train[:,5])
+        ax[0].scatter(np.arange(0, len(X_in1)),self.pressure(X_in1))
+        #ax[1].scatter(np.arange(0,len(full_train)),full_train[:,5])
 
         plt.show()
 
         self.V_p_star = np.vstack([self.u_star, self.v_star, self.p_star])
         V_p_center = np.vstack([self.u_center, self.v_center, self.p_center])
 
-        u_initial, v_initial = self.velocity(self.X_initial)
-        p_initial = self.pressure(self.X_initial)
-        V_p_initial = np.vstack([u_initial,v_initial, p_initial])
+        u_full, v_full = self.velocity(X_in1)
+        p_full = self.pressure(X_in1)
+        V_p_full = np.vstack([u_full,v_full, p_full])
 
         center_data = np.hstack([self.X_center, V_p_center.T])
 
@@ -255,7 +262,7 @@ class Preprocessing_Taylor_Green():
         print(X_train_domain)
         print(X_test_domain.shape)'''
 
-        h5 = h5py.File('data_Taylor_Green_Vortex_reduced_initial.h5', 'w')
+        h5 = h5py.File('data_Taylor_Green_Vortex_reduced_45.h5', 'w')
         g1 = h5.create_group('domain')
         g1.create_dataset('data1', data=domain_train)
         g1.create_dataset('data2', data=domain_test)
@@ -276,31 +283,43 @@ class Preprocessing_Taylor_Green():
         g5.create_dataset('data1', data=bottom_train)
         g5.create_dataset('data2', data=bottom_test)
 
-        g6 = h5.create_group('initial')
+        '''g6 = h5.create_group('initial')
         g6.create_dataset('data1', data=initial_train)
         g6.create_dataset('data2', data=initial_test)
 
         g7 = h5.create_group('center')
         g7.create_dataset('data1', data=center_data)
-
+        '''
         g8 = h5.create_group('full')
-        g8.create_dataset('data1', data=self.X_initial)
-        g8.create_dataset('data2', data=V_p_initial.T)
+        g8.create_dataset('data1', data=X_in1)
+        g8.create_dataset('data2', data=V_p_full)
 
         h5.close()
 
 def main():
-    rho = 1.164
-    nu = 1.608e-5
+    rho = 1
+    nu = 0.1
     n = 0.9
 
-    preprocessing = Preprocessing_Taylor_Green(rho, nu, n)
-    preprocessing.data_generation()
-    X_initial = preprocessing.X_initial_01
-    u_initial, v_initial =preprocessing.velocity(X_initial)
-    p_initial = preprocessing.pressure(X_initial)
-    plotting(X_initial, u_initial, v_initial, p_initial)
+    create_data_list_csv()
+    #preprocessing = Preprocessing_Taylor_Green(rho, nu, n)
+    #preprocessing.data_generation()
+    #X_initial = preprocessing.X_initial_01
+    #u_initial, v_initial =preprocessing.velocity(X_initial)
+    #p_initial = preprocessing.pressure(X_initial)
+    #plotting(X_initial, u_initial, v_initial, p_initial)
 
+def create_data_list_csv():
+    directory = os.fsencode("../data/S2S/")
+    labels=[]
+    for file in os.listdir(directory):
+        filename = str(file)
+        label = str(re.search(r'\d+', filename).group())
+
+        print(label)
+        labels.append(int(label))
+    labels_np = np.array(labels)
+    np.savetxt("../data/timeSteps.csv", labels_np, delimiter=",")
 def plotting(X, u, v, p):
 
     X_l = X
