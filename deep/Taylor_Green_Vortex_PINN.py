@@ -24,8 +24,6 @@ def h5_loader(path):
         right = h5.get('right')
         top = h5.get('top')
         bottom = h5.get('bottom')
-        initial = h5.get('initial')
-        center = h5.get('center')
         full = h5.get('full')
 
         train_domain = np.array(domain.get('data1'))
@@ -43,15 +41,11 @@ def h5_loader(path):
         train_bottom = np.array(bottom.get('data1'))
         test_bottom = np.array(bottom.get('data2'))
 
-        train_initial = np.array(initial.get('data1'))
-        test_initial = np.array(initial.get('data2'))
+        X_in = np.array(full.get('data1'))
+        V_p_in = np.array(full.get('data2'))
 
-        center_data = np.array(center.get('data1'))
+        # print(V_p_star)
 
-        X_initial = np.array(full.get('data1'))
-        V_p_initial = np.array(full.get('data2'))
-
-        #print('star',V_p_star)
         '''print(X_train_domain.shape)
         print(X_train_left.shape)
         print(X_train_right.shape)
@@ -63,16 +57,21 @@ def h5_loader(path):
         print(V_p_train_top.shape)
         print(V_p_train_bottom.shape)'''
 
-        train_data_initial = np.vstack([train_initial])
-        test_data_initial = np.vstack([test_initial])
+        train_data = np.vstack([train_domain, train_left, train_right, train_top, train_bottom])
+        test_data = np.vstack([test_domain, test_left, test_right, test_top, test_bottom])
 
-        train_data_bc = np.vstack([train_left, train_right, train_top, train_bottom])
-        test_data_bc = np.vstack([test_left, test_right, test_top, test_bottom])
-
+        print('train', train_data.shape)
+        print('test', test_data.shape)
+        '''print('########################################')
+        for i in range(len(train_data)):
+            print(train_data[i])
+            print("\n")
+        print('#######################################')
+        '''
     except Exception as e:
         print(e)
 
-    return train_data_initial, test_data_initial, train_data_bc, test_data_bc, X_initial, V_p_initial
+    return train_data, test_data, X_in, V_p_in
 
 def pars_ini():
     global args
@@ -164,7 +163,7 @@ class Taylor_green_vortex_PINN(nn.Module):
 class InitialTrainDataset(Dataset):
 
     def __init__(self, list_id):
-        self.train_data_initial, _, _, _, _, _ = h5_loader()
+        self.train_data_initial, _, _, _ = h5_loader()
         self.len = len(self.train_data_initial)
 
     def __getitem__(self, index):
@@ -179,7 +178,7 @@ class InitialTrainDataset(Dataset):
 class InitialTestDataset(Dataset):
 
     def __init__(self, list_id):
-        _, self.test_data_initial, _, _, _, _ = h5_loader()
+        _, self.test_data_initial, _,_ = h5_loader()
         self.len = len(self.test_data_initial)
 
     def __getitem__(self, index):
@@ -436,7 +435,7 @@ def main():
         if args.testrun:
             torch.cuda.manual_seed(args.nseed)
 
-    train_data_initial, test_data_initial, train_data_bc, test_data_bc, X_initial, V_p_initial = h5_loader(args.data_dir)
+    train_data_initial, test_data_initial, X_initial, V_p_initial = h5_loader(args.data_dir)
 
     u_min = V_p_initial[:,0].min()
     u_max = V_p_initial[:,0].max()
