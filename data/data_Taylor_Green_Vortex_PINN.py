@@ -191,8 +191,8 @@ class Preprocessing_Taylor_Green():
 
     def data_generation(self):
 
-        t1 = 4*self.l1
-        t2 = 6*self.l1
+        t1 = 0*self.l1
+        t2 = 2*self.l1
 
         X_in1 = self.X_in[t1:t2]
 
@@ -262,7 +262,7 @@ class Preprocessing_Taylor_Green():
         print(X_train_domain)
         print(X_test_domain.shape)'''
 
-        h5 = h5py.File('data_Taylor_Green_Vortex_reduced_45.h5', 'w')
+        h5 = h5py.File('data_Taylor_Green_Vortex_reduced_01.h5', 'w')
         g1 = h5.create_group('domain')
         g1.create_dataset('data1', data=domain_train)
         g1.create_dataset('data2', data=domain_test)
@@ -301,9 +301,9 @@ def main():
     nu = 0.1
     n = 0.9
 
-    create_data_list_csv()
-    #preprocessing = Preprocessing_Taylor_Green(rho, nu, n)
-    #preprocessing.data_generation()
+    #create_data_list_csv()
+    preprocessing = Preprocessing_Taylor_Green(rho, nu, n)
+    preprocessing.data_generation()
     #X_initial = preprocessing.X_initial_01
     #u_initial, v_initial =preprocessing.velocity(X_initial)
     #p_initial = preprocessing.pressure(X_initial)
