@@ -15,7 +15,7 @@ torch.manual_seed(1234)
 
 np.random.seed(1234)
 
-def h5_loader(path):
+def h5_loader():
     h5 = h5py.File('./data/data_Taylor_Green_Vortex_reduced_initial.h5', 'r')
 
     try:

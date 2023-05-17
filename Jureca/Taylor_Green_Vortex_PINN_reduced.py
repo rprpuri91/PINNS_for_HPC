@@ -108,7 +108,7 @@ def scaling(X):
     return x
 
 def h5_loader():
-    h5 = h5py.File('./data/S2S/data_Taylor_Green_Vortex_reduced_01.h5', 'r')
+    h5 = h5py.File('./data/data_Taylor_Green_Vortex_reduced_initial.h5', 'r')
 
     try:
         domain = h5.get('domain')
@@ -164,6 +164,7 @@ def h5_loader():
         print(e)
 
     return train_data, test_data, X_in, V_p_in
+
 
 class GenerateDataset(Dataset):
 
@@ -256,7 +257,7 @@ def denormalize(V_p_norm, u_min, u_max, v_min, v_max, p_min, p_max):
     v = ((v_norm + 1) * (v_max - v_min) / 2) + v_min
     p = ((p_norm + 1) * (p_max - p_min) / 2) + p_min
 
-    return u, v, p
+    return u_norm, v_norm, p_norm
 
 # save state of the training
 def save_state(epoch,distrib_model,loss_acc,optimizer,res_name, grank, gwsize, is_best):#,grank,gwsize,is_best):
@@ -529,8 +530,8 @@ def main():
     p_min = V_p_star[:,2].min()
     p_max = V_p_star[:,2].max()
 
-    rho = 1.2
-    nu = 1.516e-5
+    rho = 1
+    nu = 0.1
 
     X_in = torch.from_numpy(X_in).float().to(device)
 
@@ -573,7 +574,7 @@ def main():
 
     # create model
 
-    layers = np.array([3, 60, 60, 60, 60, 60, 3])
+    layers = np.array([3, 300, 300, 300, 300, 300, 3])
     model = Taylor_green_vortex_PINN(layers).to(device)
    
     print(device)
