@@ -16,7 +16,7 @@ torch.manual_seed(1234)
 np.random.seed(1234)
 
 def h5_loader():
-    h5 = h5py.File('./data/data_Taylor_Green_Vortex_reduced_initial.h5', 'r')
+    h5 = h5py.File('./data/S2S/data_Taylor_Green_Vortex_reduced_01.h5', 'r')
 
     try:
         domain = h5.get('domain')
@@ -435,7 +435,7 @@ def main():
         if args.testrun:
             torch.cuda.manual_seed(args.nseed)
 
-    train_data_initial, test_data_initial, X_initial, V_p_initial = h5_loader(args.data_dir)
+    train_data_initial, test_data_initial, X_initial, V_p_initial = h5_loader()
 
     u_min = V_p_initial[:,0].min()
     u_max = V_p_initial[:,0].max()
