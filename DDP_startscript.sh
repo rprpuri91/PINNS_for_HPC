@@ -1,40 +1,43 @@
 #!/bin/bash
 
 # general configuration of the job
-#SBATCH --job-name=TorchTest
-#SBATCH --account=raise-ctp2
+#SBATCH --job-name=TGV
+#SBATCH --account=zam
 #SBATCH --mail-user=
 #SBATCH --mail-type=ALL
-#SBATCH --output=job_redNC.out
-#SBATCH --error=job_redNC.err
+#SBATCH --output=job_tgv.out
+#SBATCH --error=job_tgv.err
 #SBATCH --time=02:00:00
 
 # configure node and process count on the CM
 #SBATCH --partition=dc-gpu-devel
-#SBATCH --nodes=3
+#SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=32
 #SBATCH --gpus-per-node=4
 #SBATCH --exclusive
 
 # gres options have to be disabled for deepv
-#SBATCH --gres=gpu:4
+#SBATCH --gres=gpu:1
 
 # parameters
 debug=false # do debug
-bs=1       # batch-size
-epochs=5000    # epochs
+bs=4       # batch-size
+epochs=100    # epochs
 lr=0.001     # learning rate
 gamma=0.99 # gamma for decay
+restartInt=1
 
 # AT
 #dataDir="/p/scratch/raise-ctp2/T31_LD/"
 #COMMAND="./Jureca/Taylor_Green_Vortex_PINN_noCentre.py"
-COMMAND="./Jureca/Taylor_Green_Vortex_PINN_initial.py"
+COMMAND="./Jureca/Taylor_Green_Vortex_PINN_grad_only.py"
+#COMMAND="./data/data_Taylor_Green_Vortex_PINN.py"
 EXEC="$COMMAND \
   --batch-size $bs \
   --epochs $epochs \
   --lr $lr \
+  --restart-int $restartInt\
   --nworker $SLURM_CPUS_PER_TASK"
 #--data-dir $dataDir"
 
@@ -44,13 +47,14 @@ EXEC="$COMMAND \
 
 # set modules
 ml --force purge
-ml Stages/2022 NVHPC/22.3 ParaStationMPI/5.5.0-1-mt NCCL/2.12.7-1-CUDA-11.5 cuDNN/8.3.1.22-CUDA-11.5 
-ml Python/3.9.6 libaio/0.3.112 HDF5/1.12.1-serial mpi-settings/CUDA 
+ml Stages/2023 StdEnv/2023 NVHPC/23.1 OpenMPI/4.1.4 cuDNN/8.6.0.163-CUDA-11.7
+ml Python/3.10.4 CMake HDF5 PnetCDF libaio/0.3.112
+ 
 
 #ml Stages/2023 StdEnv/2023 NVHPC/23.1 OpenMPI/4.1.4 cuDNN/8.6.0.163-CUDA-11.7 Python/3.10.4 HDF5 libaio/0.3.112
 
 # set env
-source /p/home/jusers/puri1/jureca/venv/envAI_jureca/bin/activate
+source /p/home/jusers/puri1/jureca/scratch/raise-ctp2/puri1/venv/envAI_jureca/bin/activate
 #source /p/project/prcoe12/RAISE/envAI_jureca/bin/activate
 # sleep a sec
 sleep 1

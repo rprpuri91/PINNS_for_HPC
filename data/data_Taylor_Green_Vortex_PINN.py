@@ -129,10 +129,8 @@ class Preprocessing_Taylor_Green():
     def normalize(self, u,v, p):
         u_norm = -1 + 2*((u - self.u_min) / (self.u_max - self.u_min))
         v_norm = -1 + 2*((v - self.v_min) / (self.v_max - self.v_min))
-        scale = (self.u_max + self.v_max)/(2*self.p_max)
-        print('Scale: ', 1/scale)
-        p_norm = (-1 + 2*((p -self.p_min) / (self.p_max - self.p_min)))/scale
-        return u_norm, v_norm, p_norm
+        p_norm = (-1 + 2*((p -self.p_min) / (self.p_max - self.p_min)))
+        return u, v, p_norm
 
 
     def denormalize(self, u_norm, v_norm, p_norm):
@@ -169,9 +167,9 @@ class Preprocessing_Taylor_Green():
         p_train = self.pressure(X_train1)
         p_test = self.pressure(X_test1)
 
-        #u_train, v_train, p_train = self.normalize(u_train, v_train,p_train)
+        u_train, v_train, p_train = self.normalize(u_train, v_train,p_train)
 
-        #u_test, v_test, p_test = self.normalize(u_test, v_test, p_test)
+        u_test, v_test, p_test = self.normalize(u_test, v_test, p_test)
 
         '''if flag == "domain":
             flag_mark = 1

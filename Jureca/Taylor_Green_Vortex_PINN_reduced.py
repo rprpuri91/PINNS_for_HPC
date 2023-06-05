@@ -108,7 +108,7 @@ def scaling(X):
     return x
 
 def h5_loader():
-    h5 = h5py.File('./data/data_Taylor_Green_Vortex_reduced_initial.h5', 'r')
+    h5 = h5py.File('./data/S2S/data_Taylor_Green_Vortex_reduced_01.h5', 'r')
 
     try:
         domain = h5.get('domain')
@@ -226,6 +226,7 @@ def train(model, device , train_loader, optimizer, epoch,grank, gwsize, rho, nu)
 
 
 def test(model, device, test_loader, grank, gwsize, rho, nu):
+    loss_function = nn.MSELoss()
     model.eval()
     test_loss = 0.0
 
@@ -237,9 +238,9 @@ def test(model, device, test_loader, grank, gwsize, rho, nu):
             inputs = data[:,0:3].to(device)
 
             outputs = model(inputs)
-            exact = data[:, 3:].to(device)
+            exact = data[:, 3:6].to(device)
 
-            loss = nn.MSELoss(outputs, exact)
+            loss = loss_function(outputs, exact)
 
             test_loss += loss.item() / inputs.shape[0]
 
@@ -374,7 +375,7 @@ def total_loss(model, data, device, rho, nu):
 
     #print('input', inputs)
 
-    exact = data[:,3:].to(device)
+    exact = data[:,3:6].to(device)
 
     #print('exact', exact)
 
