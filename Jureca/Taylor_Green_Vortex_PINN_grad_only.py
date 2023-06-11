@@ -118,7 +118,7 @@ def scaling(X):
     return X1
 
 def h5_loader():
-    h5 = h5py.File('./data/S2S/data_Taylor_Green_Vortex_reduced_01.h5', 'r')
+    h5 = h5py.File('../data/S2S/data_Taylor_Green_Vortex_reduced_01.h5', 'r')
 
     try:
         domain = h5.get('domain')
@@ -162,8 +162,12 @@ def h5_loader():
         train_data = np.vstack([train_domain, train_left, train_right, train_top, train_bottom])
         test_data = np.vstack([test_domain, test_left, test_right, test_top, test_bottom])
 
-        print('train', train_data.shape)
-        print('test', test_data.shape)
+        '''print('train', train_data.shape)
+        print('test', test_data.shape)'''
+
+        c = plt.tricontourf(train_data[:,0], train_data[:,1], train_data[:,3])
+        plt.colorbar(c)
+        plt.show()
         '''print('########################################')
         for i in range(len(train_data)):
             print(train_data[i])
@@ -712,11 +716,11 @@ def main():
     # clean-up
     dist.destroy_process_group()
 
-if __name__ == "__main__":
+'''if __name__ == "__main__":
     main()
     sys.exit()
-
-#h5_loader()
+'''
+h5_loader()
 
 
 

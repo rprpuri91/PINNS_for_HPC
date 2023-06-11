@@ -1,4 +1,5 @@
-#import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import h5py
@@ -16,7 +17,7 @@ torch.manual_seed(1234)
 np.random.seed(1234)
 
 def h5_loader():
-    h5 = h5py.File('./data/S2S/data_Taylor_Green_Vortex_reduced_01.h5', 'r')
+    h5 = h5py.File('../data/S2S/data_Taylor_Green_Vortex_reduced_01.h5', 'r')
 
     try:
         domain = h5.get('domain')
@@ -59,6 +60,14 @@ def h5_loader():
 
         train_data = np.vstack([train_domain, train_left, train_right, train_top, train_bottom])
         test_data = np.vstack([test_domain, test_left, test_right, test_top, test_bottom])
+
+        x = train_data[:,0]
+        y = train_data[:,1]
+        #c = plt.tricontourf(x,y,train_data[:,3])
+        c = plt.tricontourf(x,y,train_data[:,5])
+        #c = plt.tricontourf(x,y,train_data[:,5])
+        plt.colorbar(c)
+        plt.show()
 
         print('train', train_data.shape)
         print('test', test_data.shape)
@@ -385,13 +394,13 @@ def main():
     st = time.time()
 
     # initialize distributed backend
-    dist.init_process_group(backend=args.backend)
+    #dist.init_process_group(backend=args.backend)
 
     # deterministic testrun
-    if args.testrun:
+    '''if args.testrun:
         torch.manual_seed(args.seed)
         g = torch.Generator()
-        g.manual_seed(args.nseed)
+        g.manual_seed(args.nseed)'''
 
     #  get job rank
     lwsize = torch.cuda.device_count() if args.cuda else 0 # local world size - per node
@@ -452,11 +461,11 @@ def main():
     test_len = len(test_data_initial)
 
     # restricts data loading to a subset of the dataset exclusive to the current process
-    args.shuff = args.shuff and not args.testrun
+    '''args.shuff = args.shuff and not args.testrun
     train_sampler = torch.utils.data.distributed.DistributedSampler(dataset=InitialTrainDataset([x for x in range(train_len)]),
                                                                     num_replicas=gwsize, rank=grank, shuffle=True)
     test_sampler = torch.utils.data.distributed.DistributedSampler(dataset=InitialTestDataset([x for x in range(test_len)]),
-                                                                   num_replicas=gwsize, rank=grank, shuffle=True)
+                                                                   num_replicas=gwsize, rank=grank, shuffle=True)'''
 
     # distribute dataset to workers
     # persistent workers
@@ -466,14 +475,14 @@ def main():
 
     train_loader = torch.utils.data.DataLoader(dataset=InitialTrainDataset([x for x in range(train_len)]),
                                                batch_size=args.batch_size,
-                                               sampler=train_sampler,
+
                                                num_workers=args.nworker, pin_memory=False,
                                                persistent_workers=pers_w, drop_last=True,
                                                generator=torch.Generator(device=device),
                                                prefetch_factor=args.prefetch, **kwargs)
 
     test_loader = torch.utils.data.DataLoader(dataset=InitialTestDataset([x for x in range(test_len)]), batch_size=2,
-                                              sampler=test_sampler, num_workers=args.nworker, pin_memory=False,
+                                              num_workers=args.nworker, pin_memory=False,
                                               persistent_workers=pers_w, drop_last=True,
                                               generator=torch.Generator(device=device),
                                               prefetch_factor=args.prefetch, **kwargs)
@@ -643,11 +652,11 @@ def main():
     # clean-up
     dist.destroy_process_group()
 
-
-if __name__ == "__main__":
+h5_loader()
+'''if __name__ == "__main__":
     main()
     sys.exit()
-
+'''
 
 
 

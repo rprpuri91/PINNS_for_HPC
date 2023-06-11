@@ -53,10 +53,11 @@ class Preprocessing_Taylor_Green():
         self.p_min = self.p_star.min()
         self.p_max = self.p_star.max()
 
+        self.l1 = len(x.flatten())
 
         self.X_initial = np.vstack([x.flatten(), y.flatten(), t0]).T
         self.X_1 = np.vstack([x.flatten(), y.flatten(), t01]).T
-        self.X_initial_01 = np.vstack([self.X_initial, self.X_1])
+        self.X_initial_01 = self.X_in[0:self.l1]
         self.X_bottom = np.vstack([x1.flatten(), X0, t1.flatten()]).T
         self.X_top = np.vstack([x1.flatten(), Xpi, t1.flatten()]).T
         self.X_left = np.vstack([X0, x1.flatten(), t1.flatten()]).T
@@ -66,7 +67,7 @@ class Preprocessing_Taylor_Green():
         self.u_center, self.v_center = self.velocity(self.X_center)
         self.p_center = self.pressure(self.X_center)
 
-        self.l1 = len(x.flatten())
+
 
         print('X1',self.X_1.shape)
         print('X_initial',self.X_initial_01.shape)
@@ -302,10 +303,10 @@ def main():
     #create_data_list_csv()
     preprocessing = Preprocessing_Taylor_Green(rho, nu, n)
     preprocessing.data_generation()
-    #X_initial = preprocessing.X_initial_01
-    #u_initial, v_initial =preprocessing.velocity(X_initial)
-    #p_initial = preprocessing.pressure(X_initial)
-    #plotting(X_initial, u_initial, v_initial, p_initial)
+    X_initial = preprocessing.X_initial_01
+    u_initial, v_initial =preprocessing.velocity(X_initial)
+    p_initial = preprocessing.pressure(X_initial)
+    plotting(X_initial, u_initial, v_initial, p_initial)
 
 def create_data_list_csv():
     directory = os.fsencode("../data/S2S/")
@@ -329,18 +330,18 @@ def plotting(X, u, v, p):
     u_max = u.max()
     v_max = v.max()
     scale = (u_max + v_max)/(2* p_max)
-    p0 = (-1 + 2*((p -p_min) / (p_max - p_min)))/scale
+    p0 = (-1 + 2*((p -p_min) / (p_max - p_min)))
 
     print(u0.shape)
 
     U_grid = np.sqrt(np.square(u0) + np.square(v0))
 
-    x_grid = np.reshape(X_l[:,0], (34,17))
-    y_grid = np.reshape(X_l[:,1], (34,17))
+    x_grid = np.reshape(X_l[:,0], (17,17))
+    y_grid = np.reshape(X_l[:,1], (17,17))
 
-    u_grid = np.reshape(u0, (34,17))
-    v_grid = np.reshape(v0, (34,17))
-    p_grid = np.reshape(p0, (34,17))
+    u_grid = np.reshape(u0, (17,17))
+    v_grid = np.reshape(v0, (17,17))
+    p_grid = np.reshape(p0, (17,17))
 
     u_grid_max = u_grid.max()
     u_grid_min = u_grid.min()
