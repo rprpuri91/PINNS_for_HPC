@@ -549,8 +549,8 @@ def main():
     p_min = V_p_star[:,2].min()
     p_max = V_p_star[:,2].max()
 
-    rho = 1.29
-    mu = 0.0000171534
+    rho = 1.0
+    mu = 0.01
 
     X_in = torch.from_numpy(X_in).float().to(device)
 
