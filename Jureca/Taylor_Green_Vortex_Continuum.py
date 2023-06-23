@@ -118,7 +118,7 @@ def scaling(X):
     return X1
 
 def h5_loader():
-    h5 = h5py.File('./data/S2S/data_Taylor_Green_Vortex_reduced_01.h5', 'r')
+    h5 = h5py.File('../data/data_Taylor_Green_Vortex_reduced_0.h5', 'r')
 
     try:
         domain = h5.get('domain')
@@ -170,6 +170,8 @@ def h5_loader():
             print("\n")
         print('#######################################')
         '''
+        plt.tricontourf(train_data[:,0], train_data[:,1], train_data[:,4], levels=7)
+        plt.show()
     except Exception as e:
         print(e)
 
@@ -739,11 +741,11 @@ def main():
     # clean-up
     dist.destroy_process_group()
 
-if __name__ == "__main__":
-    main()
-    sys.exit()
+#if __name__ == "__main__":
+    #main()
+    #sys.exit()
 
-#h5_loader()
+h5_loader()
 
 
 
