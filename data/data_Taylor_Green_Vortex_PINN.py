@@ -1,9 +1,11 @@
 import matplotlib.pyplot as plt
+import matplotlib.patches as patch
+import matplotlib.animation as animation
 import numpy as np
 import torch
 import h5py
 import re
-from sklearn.preprocessing import MinMaxScaler
+#from sklearn.preprocessing import MinMaxScaler
 import sys, os, time, random, shutil
 
 
@@ -17,11 +19,16 @@ class Preprocessing_Taylor_Green():
         self.nu = nu
         self.n = n
 
-        x_values = np.arange(0, 2*np.pi, 0.4).tolist()
-        y_values = np.arange(0, 2*np.pi, 0.4).tolist()
-        t = np.arange(0, 1, 0.1)
-        x_values.append(2*np.pi)
-        y_values.append(2*np.pi)
+        x_values = np.arange(-np.pi, np.pi, 0.1).tolist()
+        y_values = np.arange(-np.pi, np.pi, 0.1).tolist()
+        t = np.arange(0, 100, 1)
+        x_values.append(np.pi)
+        y_values.append(np.pi)
+        print(len(x_values))
+        self.x_d = x_values[1:len(x_values)-1]
+        self.y_d = y_values[1:len(y_values)-1]
+
+        self.x_domain,self.y_domain = np.meshgrid(self.x_d,self.y_d)
 
         x,y = np.meshgrid(x_values, y_values)
         #y0,x0 = np.meshgrid(y_values, x_values)
@@ -34,7 +41,7 @@ class Preprocessing_Taylor_Green():
 
         self.X_in = np.hstack([x1.flatten()[:,None], y1.flatten()[:,None], t1.flatten()[:,None]])
         X0 = np.zeros(y1.flatten().shape)
-        Xpi = np.zeros(y1.flatten().shape)
+        Xpi = np.zeros(y.flatten().shape)
         Xpi[:] = np.pi
         t0 = np.zeros((x.flatten().shape))
         t01 = np.zeros((x.flatten().shape))
@@ -53,23 +60,32 @@ class Preprocessing_Taylor_Green():
         self.p_min = self.p_star.min()
         self.p_max = self.p_star.max()
 
+        self.l1 = len(x.flatten())
 
         self.X_initial = np.vstack([x.flatten(), y.flatten(), t0]).T
         self.X_1 = np.vstack([x.flatten(), y.flatten(), t01]).T
-        self.X_initial_01 = np.vstack([self.X_initial, self.X_1])
-        self.X_bottom = np.vstack([x1.flatten(), X0, t1.flatten()]).T
-        self.X_top = np.vstack([x1.flatten(), Xpi, t1.flatten()]).T
-        self.X_left = np.vstack([X0, x1.flatten(), t1.flatten()]).T
-        self.X_right = np.vstack([Xpi, x1.flatten(), t1.flatten()]).T
+        self.X_initial_01 = self.X_in[0:self.l1]
+        self.X_bottom = np.vstack([x[0,:].flatten(), y[0,:].flatten()]).T
+        self.X_top = np.vstack([x[0,:].flatten(), y[-1,:].flatten()]).T
+        self.X_left = np.vstack([x[:,0].flatten(), y[:,0].flatten()]).T
+        self.X_right = np.vstack([x[:,-1].flatten(), y[:,0].flatten()]).T
         self.X_center = np.vstack([center.flatten(), center.flatten(), t.flatten()]).T
 
-        self.u_center, self.v_center = self.velocity(self.X_center)
-        self.p_center = self.pressure(self.X_center)
+        self.u, self.v = self.velocity(self.X_initial)
+        self.p = self.pressure(self.X_initial)
 
-        self.l1 = len(x.flatten())
+        self.fig, self.ax = plt.subplots(1,1)
+        #self.animate()
+        #plt.show()
+        self.ax.add_patch(patch.Rectangle((-np.pi, -np.pi),2*np.pi, 2*np.pi, fill=False))
 
-        print('X1',self.X_1.shape)
-        print('X_initial',self.X_initial_01.shape)
+        self.ax.scatter(self.X_right[:,0], self.X_right[:,1])
+        #c = ax.tricontourf(self.X_initial[:,0],self.X_initial[:,1],self.u, levels=7)
+        ##fig.colorbar(c,ax=ax)
+        plt.show()
+
+        print('Xleft',self.X_left.shape)
+        print('X_initial',self.X_initial.shape)
         '''print(self.u_center)
         print(self.v_center)'''
 
@@ -82,6 +98,17 @@ class Preprocessing_Taylor_Green():
         '''plt.quiver(self.X_center[:, 0], self.X_center[:, 1], self.u_center, self.v_center)
         plt.show()'''
 
+    def animate(self):
+
+        for t in range(0,100):
+            print(t)
+            X = self.X_in[t*self.l1:(t+1)*self.l1]
+            u, v = self.velocity(X)
+            self.ax.clear()
+            c = self.ax.tricontourf(X[:, 0], X[:, 1], u, levels = 7)
+            self.fig.colorbar(c, ax=self.ax)
+            time.sleep(1)
+            plt.show()
 
     def velocity(self, X):
         #F(t) = e^(-2*nu*t)
@@ -94,8 +121,8 @@ class Preprocessing_Taylor_Green():
         for i in range(len(X)):
             f = -2*self.nu*X[i][2]
             F = np.exp(f)
-            u0 = -np.cos(X[i][0])*np.sin(X[i][1])*F
-            v0 = np.sin(X[i][0])*np.cos(X[i][1])*F
+            u0 = np.cos(X[i][0])*np.sin(X[i][1])*F
+            v0 = -np.sin(X[i][0])*np.cos(X[i][1])*F
             #U0 = [u0,v0]
             u.append(u0)
             v.append(v0)
@@ -187,12 +214,33 @@ class Preprocessing_Taylor_Green():
 
         return V_p_train.T, X_train1, V_p_test.T, X_test1
 
+    def X_gen(self,t):
+
+        t0 = np.zeros((self.x_domain.flatten().shape))
+        t1 = np.zeros((self.X_left.shape[0]))
+        t2 = np.zeros((self.X_right.shape[0]))
+        t3 = np.zeros((self.X_top.shape[0]))
+        t4 = np.zeros((self.X_bottom.shape[0]))
+        t0[:] = t
+        t1[:] = t
+        t2[:] = t
+        t3[:] = t
+        t4[:] = t
+        X_domain = np.vstack([self.x_domain.flatten(), self.y_domain.flatten(), t0]).T
+        X_left = np.vstack([self.X_left[:,0], self.X_left[:,1], t1]).T
+        X_right = np.vstack([self.X_right[:,0], self.X_right[:,1], t2]).T
+        X_top = np.vstack([self.X_top[:,0], self.X_top[:,1], t3]).T
+        X_bottom = np.vstack([self.X_bottom[:,0], self.X_bottom[:,1], t4]).T
+
+        return X_domain, X_left, X_right, X_top, X_bottom
+
     def data_generation(self):
 
-        t1 = 0*self.l1
-        t2 = 2*self.l1
+        t=32
 
-        X_in1 = self.X_in[t1:t2]
+        X_in1, X_left, X_right, X_top, X_bottom = self.X_gen(t)
+
+        self.X_full = np.vstack([X_in1, X_left, X_right, X_top, X_bottom])
 
         N2 = int(0.3 * len(X_in1))
 
@@ -201,16 +249,12 @@ class Preprocessing_Taylor_Green():
 
 
         V_p_train_domain, X_train_domain, V_p_test_domain, X_test_domain = self.train_test(X_domain, "domain")
-        V_p_train_left, X_train_left, V_p_test_left, X_test_left = self.train_test(self.X_left[t1:t2], "left")
-        V_p_train_right, X_train_right, V_p_test_right, X_test_right = self.train_test(self.X_right[t1:t2], "right")
-        V_p_train_top, X_train_top, V_p_test_top, X_test_top = self.train_test(self.X_top[t1:t2], "top")
-        V_p_train_bottom, X_train_bottom, V_p_test_bottom, X_test_bottom = self.train_test(self.X_bottom[t1:t2], "bottom")
+        V_p_train_left, X_train_left, V_p_test_left, X_test_left = self.train_test(X_left, "left")
+        V_p_train_right, X_train_right, V_p_test_right, X_test_right = self.train_test(X_right, "right")
+        V_p_train_top, X_train_top, V_p_test_top, X_test_top = self.train_test(X_top, "top")
+        V_p_train_bottom, X_train_bottom, V_p_test_bottom, X_test_bottom = self.train_test(X_bottom, "bottom")
         #V_p_train_full, X_train_full, V_p_test_full, X_test_full = self.train_test(X_in1, "full")
 
-        #print(self.X_top[:2*self.l1])
-        #print(self.X_initial_01[:,2])
-        plt.plot(self.X_left[t1:t2][:,2])
-        plt.show()
 
         domain_train = np.hstack([X_train_domain,V_p_train_domain])
         domain_test = np.hstack([X_test_domain, V_p_test_domain])
@@ -235,32 +279,19 @@ class Preprocessing_Taylor_Green():
 
         U_grid = np.sqrt(np.square(u0) + np.square(v0))
 
-        plt.quiver(domain_train[:, 0], domain_train[:, 1][:self.l1], u0, v0, U_grid, scale=30)
+        plt.quiver(domain_train[:, 0], domain_train[:, 1], u0, v0, U_grid, scale=30)
         plt.colorbar()
-
-        fig, ax = plt.subplots(1,2)
-        ax[0].scatter(np.arange(0, len(X_in1)),self.pressure(X_in1))
-        #ax[1].scatter(np.arange(0,len(full_train)),full_train[:,5])
 
         plt.show()
 
         self.V_p_star = np.vstack([self.u_star, self.v_star, self.p_star])
-        V_p_center = np.vstack([self.u_center, self.v_center, self.p_center])
 
-        u_full, v_full = self.velocity(X_in1)
-        p_full = self.pressure(X_in1)
-        V_p_full = np.vstack([u_full,v_full, p_full])
+        u_full,v_full = self.velocity(self.X_full)
+        p_full = self.pressure(self.X_full)
+        V_p_full = np.vstack([u_full, v_full, p_full])
 
-        center_data = np.hstack([self.X_center, V_p_center.T])
 
-        #print(initial_train)
-
-        #print(X_train_domain, V_p_train_domain)
-        '''print(V_p_test_domain.shape)
-        print(X_train_domain)
-        print(X_test_domain.shape)'''
-
-        h5 = h5py.File('data_Taylor_Green_Vortex_reduced_01.h5', 'w')
+        h5 = h5py.File('../data/data_Taylor_Green_Vortex_reduced_'+str(t)+'.h5', 'w')
         g1 = h5.create_group('domain')
         g1.create_dataset('data1', data=domain_train)
         g1.create_dataset('data2', data=domain_test)
@@ -281,13 +312,6 @@ class Preprocessing_Taylor_Green():
         g5.create_dataset('data1', data=bottom_train)
         g5.create_dataset('data2', data=bottom_test)
 
-        '''g6 = h5.create_group('initial')
-        g6.create_dataset('data1', data=initial_train)
-        g6.create_dataset('data2', data=initial_test)
-
-        g7 = h5.create_group('center')
-        g7.create_dataset('data1', data=center_data)
-        '''
         g8 = h5.create_group('full')
         g8.create_dataset('data1', data=X_in1)
         g8.create_dataset('data2', data=V_p_full)
@@ -295,17 +319,18 @@ class Preprocessing_Taylor_Green():
         h5.close()
 
 def main():
-    rho = 1
-    nu = 0.1
+    rho = 1.0
+    nu = 0.01
     n = 0.9
 
     #create_data_list_csv()
     preprocessing = Preprocessing_Taylor_Green(rho, nu, n)
+    #preprocessing.X_gen(1)
     preprocessing.data_generation()
-    #X_initial = preprocessing.X_initial_01
-    #u_initial, v_initial =preprocessing.velocity(X_initial)
-    #p_initial = preprocessing.pressure(X_initial)
-    #plotting(X_initial, u_initial, v_initial, p_initial)
+    X_initial = preprocessing.X_full
+    u_initial, v_initial =preprocessing.velocity(X_initial)
+    p_initial = preprocessing.pressure(X_initial)
+    plotting(X_initial, u_initial, v_initial, p_initial)
 
 def create_data_list_csv():
     directory = os.fsencode("../data/S2S/")
@@ -329,18 +354,18 @@ def plotting(X, u, v, p):
     u_max = u.max()
     v_max = v.max()
     scale = (u_max + v_max)/(2* p_max)
-    p0 = (-1 + 2*((p -p_min) / (p_max - p_min)))/scale
+    #p0 = (-1 + 2*((p -p_min) / (p_max - p_min)))
 
     print(u0.shape)
 
     U_grid = np.sqrt(np.square(u0) + np.square(v0))
 
-    x_grid = np.reshape(X_l[:,0], (34,17))
-    y_grid = np.reshape(X_l[:,1], (34,17))
+    x_grid = np.reshape(X_l[:,0], (82,50))
+    y_grid = np.reshape(X_l[:,1], (82,50))
 
-    u_grid = np.reshape(u0, (34,17))
-    v_grid = np.reshape(v0, (34,17))
-    p_grid = np.reshape(p0, (34,17))
+    u_grid = np.reshape(u0, (82,50))
+    v_grid = np.reshape(v0, (82,50))
+    p_grid = np.reshape(p0, (82,50))
 
     u_grid_max = u_grid.max()
     u_grid_min = u_grid.min()
@@ -353,27 +378,23 @@ def plotting(X, u, v, p):
 
     print(p_grid_max)
 
-    plt.pcolormesh(x_grid, y_grid, p_grid, shading='gouraud', label='u_x_pred', vmin=p_grid_min,
-                   vmax=p_grid_max, cmap=plt.get_cmap('rainbow'))
+    plt.tricontourf(X_l[:,0],X_l[:,1],p0, levels=7, cmap='rainbow')
     plt.quiver(X_l[:, 0], X_l[:, 1], u0, v0, U_grid, scale=30)
     plt.colorbar()
     plt.show()
 
     fig, ax = plt.subplots(1, 3)
-    c1 = ax[0].pcolormesh(x_grid, y_grid, u_grid, shading='gouraud', label='u_x_exact',
-                             vmin=u_grid_min, vmax=u_grid_max, cmap=plt.get_cmap('rainbow'))
+    c1 = ax[0].tricontourf(X_l[:,0],X_l[:,1],u0, levels=7)
     fig.colorbar(c1, ax=ax[0])
     ax[0].set_title('u_test', y=-0.1)
 
 
-    c2 = ax[1].pcolormesh(x_grid, y_grid, v_grid, shading='gouraud', label='v_x_exact',
-                             vmin=v_grid_min, vmax=v_grid_max, cmap=plt.get_cmap('rainbow'))
+    c2 = ax[1].tricontourf(X_l[:,0],X_l[:,1],v0, levels=7)
     fig.colorbar(c2, ax=ax[1])
     ax[1].set_title('v_test', y=-0.1)
 
 
-    c3 = ax[2].pcolormesh(x_grid, y_grid, p_grid, shading='gouraud', label='u_x_pred', vmin=p_grid_min,
-                             vmax=p_grid_max, cmap=plt.get_cmap('rainbow'))
+    c3 = ax[2].tricontourf(X_l[:,0],X_l[:,1],p0, levels=7)
     fig.colorbar(c3, ax=ax[2])
     ax[2].set_title('p_test', y=-0.1)
 

@@ -16,9 +16,9 @@ class Preprocessing_Taylor_Green():
         self.nu = nu
         self.n = n
 
-        x_values = np.arange(0, np.pi, 0.4).tolist()
-        y_values = np.arange(0, np.pi, 0.4).tolist()
-        self.t = np.arange(0, 1, 0.1)
+        x_values = np.arange(-np.pi, np.pi, 0.4).tolist()
+        y_values = np.arange(-np.pi, np.pi, 0.4).tolist()
+        self.t = np.arange(0, 100, 1)
         x_values.append(np.pi)
         y_values.append(np.pi)
 
