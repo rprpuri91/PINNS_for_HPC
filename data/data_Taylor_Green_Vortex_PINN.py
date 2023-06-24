@@ -313,7 +313,7 @@ class Preprocessing_Taylor_Green():
         g5.create_dataset('data2', data=bottom_test)
 
         g8 = h5.create_group('full')
-        g8.create_dataset('data1', data=X_in1)
+        g8.create_dataset('data1', data=self.X_full)
         g8.create_dataset('data2', data=V_p_full)
 
         h5.close()
