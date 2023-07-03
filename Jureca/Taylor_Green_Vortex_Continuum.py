@@ -118,7 +118,7 @@ def scaling(X):
     return X1
 
 def h5_loader():
-    h5 = h5py.File('../data/data_Taylor_Green_Vortex_reduced_0.h5', 'r')
+    h5 = h5py.File('./data/data_Taylor_Green_Vortex_reduced_0.h5', 'r')
 
     try:
         domain = h5.get('domain')
@@ -469,7 +469,11 @@ def total_loss(model, data, device, rho, mu, p_min, p_max, grank):
     #if grank==0:
         #print("\tloss_continuity :", loss_continuity, "loss_momentum1 :", loss_ns1, "loss_momentum2 :", loss_ns2, "loss_variable: ", loss_variable)
 
-    return loss_continuity + loss_fu + loss_fv + loss_fs11 + loss_fs22 + loss_fs12 + loss_variable
+    #loss =  loss_continuity + loss_fu + loss_fv + loss_fs11 + loss_fs22 + loss_fs12 + loss_variable
+
+    loss = loss_variable
+
+    return loss
 
 def main():
 
@@ -741,11 +745,11 @@ def main():
     # clean-up
     dist.destroy_process_group()
 
-#if __name__ == "__main__":
-    #main()
-    #sys.exit()
+if __name__ == "__main__":
+    main()
+    sys.exit()
 
-h5_loader()
+#h5_loader()
 
 
 
