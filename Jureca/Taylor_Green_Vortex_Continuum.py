@@ -87,7 +87,7 @@ class Taylor_green_vortex_PINN(nn.Module):
         for i in range(len(self.layers) - 2):
             z = self.linears[i](a)
 
-            a = self.activation2(z)
+            a = self.activation(z)
 
         a = self.linears[-2](a)        
 
@@ -273,7 +273,7 @@ def denormalize(V_p_norm, u_min, u_max, v_min, v_max, p_min, p_max):
     v = ((v_norm + 1) * (v_max - v_min) / 2) + v_min
     p = ((p_norm + 1) * (p_max - p_min) / 2) + p_min
 
-    return u, v, p
+    return u_norm, v_norm, p_norm
 
 # save state of the training
 def save_state(epoch,distrib_model,loss_acc,optimizer,res_name, grank, gwsize, is_best):#,grank,gwsize,is_best):
@@ -446,7 +446,11 @@ def total_loss(model, data, device, rho, mu, p_min, p_max, grank):
 
     fu = rho*ut + rho*(torch.mul(u,ux) + torch.mul(v,uy)) - s11_x - s12_y
     fv = rho*vt + rho*(torch.mul(u,vx) + torch.mul(v,vy)) - s12_x - s22_y
-
+    
+    if grank==0:
+        print('first', fu.shape)
+        print('second',fv.shape)
+    
     f_s11 = - p + 2*mu*ux - s11
     f_s22 = - p + 2*mu*vy - s22
     f_s12 = mu*(uy+vx) - s12
@@ -469,9 +473,9 @@ def total_loss(model, data, device, rho, mu, p_min, p_max, grank):
     #if grank==0:
         #print("\tloss_continuity :", loss_continuity, "loss_momentum1 :", loss_ns1, "loss_momentum2 :", loss_ns2, "loss_variable: ", loss_variable)
 
-    #loss =  loss_continuity + loss_fu + loss_fv + loss_fs11 + loss_fs22 + loss_fs12 + loss_variable
+    loss =  loss_continuity + loss_fu + loss_fv + loss_fs11 + loss_fs22 + loss_fs12 + loss_variable
 
-    loss = loss_variable
+    #loss = loss_variable
 
     return loss
 
@@ -553,6 +557,9 @@ def main():
     p_min = V_p_star[:,2].min()
     p_max = V_p_star[:,2].max()
 
+    if grank==0:
+        print('max p',p_max)
+
     rho = 1.0
     mu = 0.01
 
@@ -616,7 +623,10 @@ def main():
 
     # optimizer
     optimizer = torch.optim.SGD(distrib_model.parameters(), lr=args.lr)
-    #scheduler_lr = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=args.gamma)
+    scheduler_lr = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=args.gamma)
+    scheduler_cosine = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max = args.epochs)
+    
+    scheduler = scheduler_cosine
 
     # resume state
     start_epoch = 1
@@ -653,6 +663,7 @@ def main():
     et = time.time()
     loss_acc_list = []
     test_acc_list = []
+    rel_error_list = []
     for epoch in range(start_epoch, args.epochs + 1):
 
         lt = time.time()
@@ -668,13 +679,20 @@ def main():
 
         # testing
         acc_test, rel_err = test(distrib_model, device, test_loader, grank, gwsize, rho, mu)
+
+        # lr Scheduler
+        scheduler.step()
         
         if grank == 0 and lrank == 0:
             print('Epoch finished')
             print('Epoch: {:03d}, Loss: {:.5f}, Test MSE: {:.5f}, Test Error: {:.5f}'.
                 format(epoch, loss_acc, acc_test, rel_err))
+        lr_list = []
+        latest_lr = scheduler.get_last_lr()
+        lr_list.append(latest_lr)
 
         test_acc_list.append(acc_test)
+        rel_error_list.append(rel_err)
 
         if epoch == start_epoch:
             first_ep_t = time.time() - lt
@@ -703,8 +721,10 @@ def main():
             best_acc = min(loss_acc, best_acc)
             V_p_pred_norm = distrib_model(X_in)
             u_pred, v_pred, p_pred = denormalize(V_p_pred_norm[:,0:3], u_min, u_max, v_min, v_max, p_min, p_max)
-            result = [V_p_star,X_in,V_p_pred_norm, u_pred,v_pred, p_pred, loss_acc_list, epoch]
-            f = open('./result/result_Taylor_green_vortex_reduced.pkl', 'wb')
+            result = [V_p_star,X_in,V_p_pred_norm, u_pred,v_pred, p_pred, loss_acc_list, rel_error_list, lr_list]
+            if grank == 0:
+                print('Saving results at epoch: ',epoch)
+            f = open('./result/result_Taylor_green_vortex_reduced'+str(epoch)+'.pkl', 'wb')
             pickle.dump(result, f)
             f.close()
 
@@ -729,8 +749,8 @@ def main():
         print(f'TIMER: total testing time: {time.time() - et} s')
 
 
-    V_p_pred_norm = distrib_model(X_in)
-    u_pred, v_pred, p_pred = denormalize(V_p_pred_norm[:,0:3], u_min, u_max, v_min, v_max, p_min, p_max)
+    #V_p_pred_norm = distrib_model(X_in)
+    #u_pred, v_pred, p_pred = denormalize(V_p_pred_norm[:,0:3], u_min, u_max, v_min, v_max, p_min, p_max)
 
     if grank==0:
         f_time = time.time() - st

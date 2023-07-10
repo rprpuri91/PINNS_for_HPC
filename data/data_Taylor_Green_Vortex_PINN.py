@@ -74,15 +74,15 @@ class Preprocessing_Taylor_Green():
         self.u, self.v = self.velocity(self.X_initial)
         self.p = self.pressure(self.X_initial)
 
-        self.fig, self.ax = plt.subplots(1,1)
+        #self.fig, self.ax = plt.subplots(1,1)
         #self.animate()
         #plt.show()
-        self.ax.add_patch(patch.Rectangle((-np.pi, -np.pi),2*np.pi, 2*np.pi, fill=False))
+        #self.ax.add_patch(patch.Rectangle((-np.pi, -np.pi),2*np.pi, 2*np.pi, fill=False))
 
-        self.ax.scatter(self.X_right[:,0], self.X_right[:,1])
+        #self.ax.scatter(self.X_right[:,0], self.X_right[:,1])
         #c = ax.tricontourf(self.X_initial[:,0],self.X_initial[:,1],self.u, levels=7)
         ##fig.colorbar(c,ax=ax)
-        plt.show()
+        #plt.show()
 
         print('Xleft',self.X_left.shape)
         print('X_initial',self.X_initial.shape)
@@ -154,9 +154,15 @@ class Preprocessing_Taylor_Green():
         return u_norm, v_norm, p_norm
 
     def normalize(self, u,v, p):
-        u_norm = -1 + 2*((u - self.u_min) / (self.u_max - self.u_min))
-        v_norm = -1 + 2*((v - self.v_min) / (self.v_max - self.v_min))
-        p_norm = (-1 + 2*((p -self.p_min) / (self.p_max - self.p_min)))
+        u_min = u.min()
+        v_min = v.min()
+        p_min = p.min()
+        u_max = u.max()
+        v_max = v.max()
+        p_max = p.max()
+        u_norm = -1 + 2*((u - u_min) / (u_max - u_min))
+        v_norm = -1 + 2*((v - v_min) / (v_max - v_min))
+        p_norm = -1 + 2*((p - p_min) / (p_max - p_min))
         return u, v, p_norm
 
 
@@ -236,7 +242,7 @@ class Preprocessing_Taylor_Green():
 
     def data_generation(self):
 
-        t=32
+        t=0
 
         X_in1, X_left, X_right, X_top, X_bottom = self.X_gen(t)
 
@@ -279,19 +285,23 @@ class Preprocessing_Taylor_Green():
 
         U_grid = np.sqrt(np.square(u0) + np.square(v0))
 
-        plt.quiver(domain_train[:, 0], domain_train[:, 1], u0, v0, U_grid, scale=30)
-        plt.colorbar()
+        #plt.quiver(domain_train[:, 0], domain_train[:, 1], u0, v0, U_grid, scale=30)
+        #plt.colorbar()
 
-        plt.show()
+        #plt.show()
 
         self.V_p_star = np.vstack([self.u_star, self.v_star, self.p_star])
 
         u_full,v_full = self.velocity(self.X_full)
         p_full = self.pressure(self.X_full)
+        p_max = p_full.max()
+        
+        print('max p', p_max)
+        u_full, v_full, p_full = self.normalize(u_full, v_full, p_full)
         V_p_full = np.vstack([u_full, v_full, p_full])
 
 
-        h5 = h5py.File('../data/data_Taylor_Green_Vortex_reduced_'+str(t)+'.h5', 'w')
+        h5 = h5py.File('./data/data_Taylor_Green_Vortex_reduced_'+str(t)+'.h5', 'w')
         g1 = h5.create_group('domain')
         g1.create_dataset('data1', data=domain_train)
         g1.create_dataset('data2', data=domain_test)
@@ -315,6 +325,7 @@ class Preprocessing_Taylor_Green():
         g8 = h5.create_group('full')
         g8.create_dataset('data1', data=self.X_full)
         g8.create_dataset('data2', data=V_p_full)
+        g8.create_dataset('data3', data=p_max)
 
         h5.close()
 
@@ -330,7 +341,7 @@ def main():
     X_initial = preprocessing.X_full
     u_initial, v_initial =preprocessing.velocity(X_initial)
     p_initial = preprocessing.pressure(X_initial)
-    plotting(X_initial, u_initial, v_initial, p_initial)
+    #plotting(X_initial, u_initial, v_initial, p_initial)
 
 def create_data_list_csv():
     directory = os.fsencode("../data/S2S/")

@@ -69,7 +69,6 @@ class Taylor_green_vortex_PINN(nn.Module):
         if torch.is_tensor(X) != True:
             X = torch.from_numpy(X)
 
-
         x = scaling(X)
         # convert to float
         a = x.float()

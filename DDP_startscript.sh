@@ -23,16 +23,16 @@
 # parameters
 debug=false # do debug
 bs=4       # batch-size
-epochs=5035    # epochs
+epochs=10    # epochs
 lr=0.001     # learning rate
 gamma=0.99 # gamma for decay
-restartInt=1
+restartInt=100
 
 # AT
 #dataDir="/p/scratch/raise-ctp2/T31_LD/"
 #COMMAND="./Jureca/Taylor_Green_Vortex_PINN_noCentre.py"
-COMMAND="./Jureca/Taylor_Green_Vortex_Continuum.py"
-#COMMAND="./data/data_Taylor_Green_Vortex_PINN.py"
+#COMMAND="./Jureca/Taylor_Green_Vortex_Continuum.py"
+COMMAND="./data/data_Taylor_Green_Vortex_PINN.py"
 EXEC="$COMMAND \
   --batch-size $bs \
   --epochs $epochs \
