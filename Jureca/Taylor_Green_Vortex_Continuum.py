@@ -229,8 +229,8 @@ def train(model, device , train_loader, optimizer, epoch,grank, gwsize, rho, mu,
         loss = total_loss(model, data, device, rho, mu, p_max, p_min, grank)
         
         if count == 0:
-            loss_initial = loss_initial(model, train_data_i)
-            loss = loss + loss_initial
+            loss1 = loss_initial(model, train_data_i, device)
+            loss = loss + loss1
             loss.backward()
         else:
             loss.backward()
@@ -258,7 +258,7 @@ def test(model, device, test_loader, grank, gwsize, rho, mu, test_data_i):
     #test_loss_acc = []
     with torch.no_grad():
         output_initial = model(test_data_i[:,0:3])
-        error_initial =  torch.linalg.norm((test_data_i[:,3:6] - outputs[:,0:3]), 2) / torch.linalg.norm(test_data_i[:,3:6],2)
+        error_initial =  torch.linalg.norm((test_data_i[:,3:6] - output_initial[:,0:3]), 2) / torch.linalg.norm(test_data_i[:,3:6],2)
         for data in test_loader:
             # print(data)
 
@@ -278,13 +278,13 @@ def test(model, device, test_loader, grank, gwsize, rho, mu, test_data_i):
 
     return test_loss/(len(test_loader.dataset)), rel_err/(len(test_loader.dataset)), error_initial
 
-def denormalize_full(V_p_norm, u_min, u_max, v_min, v_max, p_min, p_max):
+def denormalize_full(V_p_norm, p_min, p_max):
     u_norm = V_p_norm[:,0]
     v_norm = V_p_norm[:,1]
     p_norm = V_p_norm[:,2]
 
-    u = ((u_norm + 1) * (u_max - u_min) / 2) + u_min
-    v = ((v_norm + 1) * (v_max - v_min) / 2) + v_min
+    #u = ((u_norm + 1) * (u_max - u_min) / 2) + u_min
+    #v = ((v_norm + 1) * (v_max - v_min) / 2) + v_min
     p = ((p_norm + 1) * (p_max - p_min) / 2) + p_min
 
     return u_norm, v_norm, p_norm
@@ -381,7 +381,7 @@ def par_allgather_obj(obj,gwsize):
     dist.all_gather_object(res,obj,group=None)
     return res
 
-def loss_initial(model, train_data_i):
+def loss_initial(model, train_data_i, device):
     loss_function = nn.MSELoss()
 
     inputs = train_data_i[:,0:3].to(device)
@@ -426,7 +426,7 @@ def total_loss(model, data, device, rho, mu, p_min, p_max, grank):
 
     u = torch.reshape(u, (u.shape[0],1))
     v = torch.reshape(v, (v.shape[0],1))
-    p_norm = torch.reshape(p, (p.shape[0],1))
+    p_norm = torch.reshape(p_norm, (p_norm.shape[0],1))
 
     p = denormalize(p_norm, p_max, p_min)
     s11 = torch.reshape(s11, (s11.shape[0],1))
@@ -584,11 +584,11 @@ def main():
     rho = 1.0
     mu = 0.01
 
-    X_in = torch.from_numpy(X_in).float().to(device)
-
-    path = './data/data_Taylor_Green_Vortex_reduced_0.h5'
+    path = './data/data_Taylor_Green_Vortex_reduced_5.h5'
 
     train_data, test_data, X_in, V_p_star, _, _ = h5_loader(path)
+
+    X_in = torch.from_numpy(X_in).float().to(device)
     
     train_len = len(train_data)
     test_len = len(test_data)
@@ -745,7 +745,7 @@ def main():
             #save_state(epoch, model, loss_acc, optimizer, res_name)
             best_acc = min(loss_acc, best_acc)
             V_p_pred_norm = distrib_model(X_in)
-            u_pred, v_pred, p_pred = denormalize_full(V_p_pred_norm[:,0:3], u_min, u_max, v_min, v_max, p_min, p_max)
+            u_pred, v_pred, p_pred = denormalize_full(V_p_pred_norm[:,0:3], p_min, p_max)
             result = [V_p_star,X_in,V_p_pred_norm, u_pred,v_pred, p_pred, loss_acc_list, rel_error_list, lr_list]
             if grank == 0:
                 print('Saving results at epoch: ',epoch)

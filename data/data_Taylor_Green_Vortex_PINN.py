@@ -154,15 +154,10 @@ class Preprocessing_Taylor_Green():
         return u_norm, v_norm, p_norm
 
     def normalize(self, u,v, p):
-        u_min = u.min()
-        v_min = v.min()
-        p_min = p.min()
-        u_max = u.max()
-        v_max = v.max()
-        p_max = p.max()
-        u_norm = -1 + 2*((u - u_min) / (u_max - u_min))
-        v_norm = -1 + 2*((v - v_min) / (v_max - v_min))
-        p_norm = -1 + 2*((p - p_min) / (p_max - p_min))
+
+        u_norm = -1 + 2*((u - self.u_min) / (self.u_max - self.u_min))
+        v_norm = -1 + 2*((v - self.v_min) / (self.v_max - self.v_min))
+        p_norm = -1 + 2*((p - self.p_min) / (self.p_max - self.p_min))
         return u, v, p_norm
 
 
@@ -242,7 +237,7 @@ class Preprocessing_Taylor_Green():
 
     def data_generation(self):
 
-        t=5
+        t=0
 
         X_in1, X_left, X_right, X_top, X_bottom = self.X_gen(t)
 
@@ -294,12 +289,9 @@ class Preprocessing_Taylor_Green():
 
         u_full,v_full = self.velocity(self.X_full)
         p_full = self.pressure(self.X_full)
-        p_max = p_full.max()
-        
-        print('max p', p_max)
+
         u_full, v_full, p_full = self.normalize(u_full, v_full, p_full)
         V_p_full = np.vstack([u_full, v_full, p_full])
-
 
         h5 = h5py.File('../data/data_Taylor_Green_Vortex_reduced_'+str(t)+'.h5', 'w')
         g1 = h5.create_group('domain')
@@ -325,7 +317,8 @@ class Preprocessing_Taylor_Green():
         g8 = h5.create_group('full')
         g8.create_dataset('data1', data=self.X_full)
         g8.create_dataset('data2', data=V_p_full)
-        g8.create_dataset('data3', data=p_max)
+        g8.create_dataset('data3', data=self.p_max)
+        g8.create_dataset('data4', data=self.p_min)
 
         h5.close()
 
