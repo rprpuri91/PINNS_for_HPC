@@ -242,7 +242,7 @@ class Preprocessing_Taylor_Green():
 
     def data_generation(self):
 
-        t=0
+        t=5
 
         X_in1, X_left, X_right, X_top, X_bottom = self.X_gen(t)
 
@@ -339,10 +339,9 @@ def main():
     #preprocessing.X_gen(1)
     preprocessing.data_generation()
     X_initial = preprocessing.X_full
+    print('X', X_initial)
     u_initial, v_initial =preprocessing.velocity(X_initial)
     p_initial = preprocessing.pressure(X_initial)
-    plt.plot(u_initial)
-    plt.show()
     plotting(X_initial, u_initial, v_initial, p_initial)
 
 def create_data_list_csv():
@@ -367,7 +366,8 @@ def plotting(X, u, v, p):
     u_max = u.max()
     v_max = v.max()
     scale = (u_max + v_max)/(2* p_max)
-    #p0 = (-1 + 2*((p -p_min) / (p_max - p_min)))
+    p0 = (-1 + 2*((p -p_min) / (p_max - p_min)))
+    p_orig = p_max*p0
 
     print(u0.shape)
 
@@ -396,7 +396,7 @@ def plotting(X, u, v, p):
     plt.colorbar()
     plt.show()
 
-    fig, ax = plt.subplots(1, 3)
+    fig, ax = plt.subplots(1, 4)
     c1 = ax[0].tricontourf(X_l[:,0],X_l[:,1],u0, levels=7)
     fig.colorbar(c1, ax=ax[0])
     ax[0].set_title('u_test', y=-0.1)
@@ -410,6 +410,10 @@ def plotting(X, u, v, p):
     c3 = ax[2].tricontourf(X_l[:,0],X_l[:,1],p0, levels=7)
     fig.colorbar(c3, ax=ax[2])
     ax[2].set_title('p_test', y=-0.1)
+
+    c4 = ax[3].tricontourf(X_l[:, 0], X_l[:, 1], p_orig, levels=7)
+    fig.colorbar(c4, ax=ax[3])
+    ax[2].set_title('p_test_orig', y=-0.1)
 
 
     plt.show()
