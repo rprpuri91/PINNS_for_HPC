@@ -107,7 +107,7 @@ def scaling(X):
     x = X[:,0:2]
     t = X[:,2]
     t = torch.reshape(t, (t.shape[0],1))
-
+    t = t/100 
     min_x, max_x = torch.min(x), torch.max(x)
     # preprocessing input
     x = (x - min_x) / (max_x - min_x)
@@ -117,7 +117,7 @@ def scaling(X):
 
     return X1
 
-def h5_loader():
+def h5_loader(path):
     h5 = h5py.File('./data/data_Taylor_Green_Vortex_reduced_0.h5', 'r')
 
     try:
@@ -145,7 +145,8 @@ def h5_loader():
 
         X_in = np.array(full.get('data1'))
         V_p_in = np.array(full.get('data2'))
-
+        p_max = np.array(full.get('data3'))
+        p_min = np.array(full.get('data4'))
         # print(V_p_star)
 
         '''print(X_train_domain.shape)
@@ -170,18 +171,22 @@ def h5_loader():
             print("\n")
         print('#######################################')
         '''
-        plt.tricontourf(train_data[:,0], train_data[:,1], train_data[:,4], levels=7)
-        plt.show()
+        #plt.tricontourf(train_data[:,0], train_data[:,1], train_data[:,4], levels=7)
+        #plt.show()
     except Exception as e:
         print(e)
 
-    return train_data, test_data, X_in, V_p_in
+    return train_data, test_data, X_in, V_p_in, p_max, p_min
+
+def denormalize(self, p_norm, p_max, p_min):
+    p = (((p_norm + 1) * (self.p_max - self.p_min)) / 2) + self.p_min
+    return p
 
 
 class GenerateDataset(Dataset):
 
-    def __init__(self, list_id):
-        self.train_data, _ , _, _ = h5_loader()
+    def __init__(self, list_id, path):
+        self.train_data, _ , _, _,_ ,_= h5_loader(path)
         self.len = len(self.train_data)
 
     def __getitem__(self,index):
@@ -194,8 +199,8 @@ class GenerateDataset(Dataset):
 
 class TestDataset(Dataset):
 
-    def __init__(self, list_id):
-        _, self.test_data, _, _ = h5_loader()
+    def __init__(self, list_id, path):
+        _, self.test_data, _, _, _ ,_= h5_loader(path)
         self.len = len(self.test_data)
 
     def __getitem__(self, index):
@@ -206,7 +211,7 @@ class TestDataset(Dataset):
     def __len__(self):
         return self.len
 
-def train(model, device , train_loader, optimizer, epoch,grank, gwsize, rho, mu, p_max, p_min):
+def train(model, device , train_loader, optimizer, epoch,grank, gwsize, rho, mu, p_max, p_min, train_data_i):
     model.train()
     t_list = []
     loss_acc = 0
@@ -220,9 +225,16 @@ def train(model, device , train_loader, optimizer, epoch,grank, gwsize, rho, mu,
         optimizer.zero_grad()
         # predictions = distrib_model(inputs)
         #with torch.cuda.amp.autocast():
+        
         loss = total_loss(model, data, device, rho, mu, p_max, p_min, grank)
-
-        loss.backward()
+        
+        if count == 0:
+            loss_initial = loss_initial(model, train_data_i)
+            loss = loss + loss_initial
+            loss.backward()
+        else:
+            loss.backward()
+        
         optimizer.step()
         if batch_idx % args.log_int == 0 and grank==0:
             print('Batch: ', count)
@@ -238,13 +250,15 @@ def train(model, device , train_loader, optimizer, epoch,grank, gwsize, rho, mu,
     return loss_acc / len(train_loader.dataset)
 
 
-def test(model, device, test_loader, grank, gwsize, rho, mu):
+def test(model, device, test_loader, grank, gwsize, rho, mu, test_data_i):
     loss_function = nn.MSELoss()
     model.eval()
     test_loss = 0.0
     rel_err = 0.0
     #test_loss_acc = []
     with torch.no_grad():
+        output_initial = model(test_data_i[:,0:3])
+        error_initial =  torch.linalg.norm((test_data_i[:,3:6] - outputs[:,0:3]), 2) / torch.linalg.norm(test_data_i[:,3:6],2)
         for data in test_loader:
             # print(data)
 
@@ -262,9 +276,9 @@ def test(model, device, test_loader, grank, gwsize, rho, mu):
             # count+=1
             #test_loss_acc.append(test_loss)
 
-    return test_loss/(len(test_loader.dataset)), rel_err/(len(test_loader.dataset))
+    return test_loss/(len(test_loader.dataset)), rel_err/(len(test_loader.dataset)), error_initial
 
-def denormalize(V_p_norm, u_min, u_max, v_min, v_max, p_min, p_max):
+def denormalize_full(V_p_norm, u_min, u_max, v_min, v_max, p_min, p_max):
     u_norm = V_p_norm[:,0]
     v_norm = V_p_norm[:,1]
     p_norm = V_p_norm[:,2]
@@ -367,6 +381,16 @@ def par_allgather_obj(obj,gwsize):
     dist.all_gather_object(res,obj,group=None)
     return res
 
+def loss_initial(model, train_data_i):
+    loss_function = nn.MSELoss()
+
+    inputs = train_data_i[:,0:3].to(device)
+    exact = train_data_i[:,3:6].to(device)
+
+    output = model(inputs)
+
+    return loss_function(output[:,0:3], exact)
+
 def total_loss(model, data, device, rho, mu, p_min, p_max, grank):
 
     loss_function = nn.MSELoss()
@@ -387,40 +411,41 @@ def total_loss(model, data, device, rho, mu, p_min, p_max, grank):
 
     u = output[:,0]
     v = output[:,1]
-    p = output[:,2]
+    p_norm = output[:,2]
     s11 = output[:,3]
     s22 = output[:,4]
     s12 = output[:,5]
 
+    x = inputs[:,0]
+    y = inputs[:,1]
+    t = inputs[:,2]
+
+    x = torch.reshape(x, (x.shape[0],1))
+    y = torch.reshape(y, (y.shape[0],1))
+    t = torch.reshape(t, (t.shape[0],1))
+
     u = torch.reshape(u, (u.shape[0],1))
     v = torch.reshape(v, (v.shape[0],1))
-    p = torch.reshape(p, (p.shape[0],1))
+    p_norm = torch.reshape(p, (p.shape[0],1))
+
+    p = denormalize(p_norm, p_max, p_min)
     s11 = torch.reshape(s11, (s11.shape[0],1))
     s22 =  torch.reshape(s22, (s22.shape[0],1))
     s12 = torch.reshape(s12, (s12.shape[0],1))
 
-
-    u_x_y_t = torch.autograd.grad(u, g, torch.ones(inputs.shape[0], 1).to(device), create_graph = True)[0]
-    v_x_y_t = torch.autograd.grad(v, g, torch.ones(inputs.shape[0], 1).to(device), create_graph = True)[0]
-    p_x_y_t = torch.autograd.grad(p, g, torch.ones(inputs.shape[0], 1).to(device), create_graph = True)[0]
-
-    s11_x_y_t = torch.autograd.grad(s11, g, torch.ones(inputs.shape[0], 1).to(device), create_graph = True)[0]
-    s22_x_y_t = torch.autograd.grad(s22, g, torch.ones(inputs.shape[0], 1).to(device), create_graph = True)[0]
-    s12_x_y_t = torch.autograd.grad(s12, g, torch.ones(inputs.shape[0], 1).to(device), create_graph = True)[0]
-
-    ux = u_x_y_t[:,0]
-    uy = u_x_y_t[:,1]
-    ut = u_x_y_t[:,2]
+    ux = torch.gradient(u, spacing = x)
+    uy = torch.gradient(u, spacing = y)
+    ut = torch.gradient(u, spacing = t)
     
-    vx = v_x_y_t[:,0]
-    vy = v_x_y_t[:,1]
-    vt = v_x_y_t[:,2]
+    vx = torch.gradient(v, spacing = x)
+    vy = torch.gradient(v, spacing = y)
+    vt = torch.gradient(v, spacing = t)
 
-    s11_x = s11_x_y_t[:,0]
-    s22_y = s22_x_y_t[:,1]
+    s11_x = torch.gradient(s11, spacing = x)
+    s22_y = torch.gradeint(s22, spacing = y)
 
-    s12_x = s12_x_y_t[:,0]
-    s12_y = s12_x_y_t[:,1]    
+    s12_x = torch.gradient(s12, spacing = x)
+    s12_y = torch.gradient(s12, spacing = y)  
 
     ut =  torch.reshape(ut, (ut.shape[0],1))
     vt =  torch.reshape(vt, (vt.shape[0],1))
@@ -429,8 +454,8 @@ def total_loss(model, data, device, rho, mu, p_min, p_max, grank):
     vx = torch.reshape(vx, (vx.shape[0],1))
     vy = torch.reshape(vy, (vy.shape[0],1))
 
-    px = p_x_y_t[:,0]
-    py = p_x_y_t[:,1]
+    px = torch.gradient(p, spacing = x)
+    py = torch.gradient(p, spacing = y)
 
     px =  torch.reshape(px, (px.shape[0],1)) 
     py = torch.reshape(py, (py.shape[0],1))
@@ -451,8 +476,8 @@ def total_loss(model, data, device, rho, mu, p_min, p_max, grank):
         print('first', fu.shape)
         print('second',fv.shape)
     
-    f_s11 = - p + 2*mu*ux - s11
-    f_s22 = - p + 2*mu*vy - s22
+    f_s11 = - p_max*p + 2*mu*ux - s11
+    f_s22 = - p_max*p + 2*mu*vy - s22
     f_s12 = mu*(uy+vx) - s12
 
     target1 = torch.zeros_like(continuity, device=device)
@@ -547,30 +572,30 @@ def main():
         if args.testrun:
             torch.cuda.manual_seed(args.nseed)
 
-    train_data, test_data, X_in, V_p_star = h5_loader()
-
-
-    u_min = V_p_star[:,0].min()
+    train_data_i, test_data_i, X_in, V_p_star_i, p_max, p_min = h5_loader('./data/data_Taylor_Green_Vortex_reduced_0.h5')
+    
+    '''u_min = V_p_star[:,0].min()
     u_max = V_p_star[:,0].max()
     v_min = V_p_star[:,1].min()
     v_max = V_p_star[:,1].max()
     p_min = V_p_star[:,2].min()
-    p_max = V_p_star[:,2].max()
-
-    if grank==0:
-        print('max p',p_max)
+    p_max = V_p_star[:,2].max()'''
 
     rho = 1.0
     mu = 0.01
 
     X_in = torch.from_numpy(X_in).float().to(device)
 
+    path = './data/data_Taylor_Green_Vortex_reduced_0.h5'
+
+    train_data, test_data, X_in, V_p_star, _, _ = h5_loader(path)
+    
     train_len = len(train_data)
     test_len = len(test_data)
 
     # restricts data loading to a subset of the dataset exclusive to the current process
     args.shuff = args.shuff and not args.testrun
-    train_sampler = torch.utils.data.distributed.DistributedSampler(dataset = GenerateDataset([x for x in range(train_len)]),
+    train_sampler = torch.utils.data.distributed.DistributedSampler(dataset = GenerateDataset([x for x in range(train_len)], path),
                             num_replicas=gwsize, rank=grank, shuffle=True)
     test_sampler = torch.utils.data.distributed.DistributedSampler(dataset = TestDataset([x for x in range(test_len)]),
                             num_replicas=gwsize, rank=grank, shuffle=True)
@@ -582,7 +607,7 @@ def main():
     # deterministic testrun - the same dataset each run
     kwargs = {'worker_init_fn': seed_worker, 'generator': g} if args.testrun else {}
 
-    train_loader = torch.utils.data.DataLoader(dataset = GenerateDataset([x for x in range(train_len)]), batch_size=args.batch_size,
+    train_loader = torch.utils.data.DataLoader(dataset = GenerateDataset([x for x in range(train_len)], path), batch_size=args.batch_size,
                                                sampler = train_sampler,
                                                num_workers=args.nworker, pin_memory=False,
                                                persistent_workers=pers_w, drop_last=True,
@@ -671,22 +696,22 @@ def main():
         #training
         if args.benchrun and epoch==args.epochs:
             with torch.autograd.profiler.profile(use_cuda=args.cuda, profile_memory=True) as prof:
-                loss_acc = train(distrib_model, device, train_loader, optimizer,epoch, grank, gwsize, rho, mu, p_max,p_min)
+                loss_acc = train(distrib_model, device, train_loader, optimizer,epoch, grank, gwsize, rho, mu, p_max,p_min, train_data_i)
         else:
-            loss_acc = train(distrib_model, device, train_loader, optimizer, epoch, grank, gwsize, rho, mu, p_max, p_min)
+            loss_acc = train(distrib_model, device, train_loader, optimizer, epoch, grank, gwsize, rho, mu, p_max, p_min, train_data_i)
 
         loss_acc_list.append(loss_acc)
 
         # testing
-        acc_test, rel_err = test(distrib_model, device, test_loader, grank, gwsize, rho, mu)
+        acc_test, rel_err, error_initial = test(distrib_model, device, test_loader, grank, gwsize, rho, mu, test_data_i)
 
         # lr Scheduler
         scheduler.step()
         
         if grank == 0 and lrank == 0:
             print('Epoch finished')
-            print('Epoch: {:03d}, Loss: {:.5f}, Test MSE: {:.5f}, Test Error: {:.5f}'.
-                format(epoch, loss_acc, acc_test, rel_err))
+            print('Epoch: {:03d}, Loss: {:.5f}, Test MSE: {:.5f}, Test Error: {:.5f}, Initial_Error: {:.5f}'.
+                format(epoch, loss_acc, acc_test, rel_err, error_initial))
         lr_list = []
         latest_lr = scheduler.get_last_lr()
         lr_list.append(latest_lr)
@@ -720,7 +745,7 @@ def main():
             #save_state(epoch, model, loss_acc, optimizer, res_name)
             best_acc = min(loss_acc, best_acc)
             V_p_pred_norm = distrib_model(X_in)
-            u_pred, v_pred, p_pred = denormalize(V_p_pred_norm[:,0:3], u_min, u_max, v_min, v_max, p_min, p_max)
+            u_pred, v_pred, p_pred = denormalize_full(V_p_pred_norm[:,0:3], u_min, u_max, v_min, v_max, p_min, p_max)
             result = [V_p_star,X_in,V_p_pred_norm, u_pred,v_pred, p_pred, loss_acc_list, rel_error_list, lr_list]
             if grank == 0:
                 print('Saving results at epoch: ',epoch)
