@@ -301,7 +301,7 @@ class Preprocessing_Taylor_Green():
         V_p_full = np.vstack([u_full, v_full, p_full])
 
 
-        h5 = h5py.File('./data/data_Taylor_Green_Vortex_reduced_'+str(t)+'.h5', 'w')
+        h5 = h5py.File('../data/data_Taylor_Green_Vortex_reduced_'+str(t)+'.h5', 'w')
         g1 = h5.create_group('domain')
         g1.create_dataset('data1', data=domain_train)
         g1.create_dataset('data2', data=domain_test)
@@ -341,7 +341,9 @@ def main():
     X_initial = preprocessing.X_full
     u_initial, v_initial =preprocessing.velocity(X_initial)
     p_initial = preprocessing.pressure(X_initial)
-    #plotting(X_initial, u_initial, v_initial, p_initial)
+    plt.plot(u_initial)
+    plt.show()
+    plotting(X_initial, u_initial, v_initial, p_initial)
 
 def create_data_list_csv():
     directory = os.fsencode("../data/S2S/")
