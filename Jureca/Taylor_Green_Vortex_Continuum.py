@@ -149,6 +149,9 @@ def h5_loader(path):
         p_min = np.array(full.get('data4'))
         # print(V_p_star)
 
+        p_max = torch.from_numpy(p_max).float()
+        p_min = torch.from_numpy(p_min).float()
+
         '''print(X_train_domain.shape)
         print(X_train_left.shape)
         print(X_train_right.shape)
@@ -178,8 +181,8 @@ def h5_loader(path):
 
     return train_data, test_data, X_in, V_p_in, p_max, p_min
 
-def denormalize(self, p_norm, p_max, p_min):
-    p = (((p_norm + 1) * (self.p_max - self.p_min)) / 2) + self.p_min
+def denormalize(p_norm, p_max, p_min):
+    p = (((p_norm + 1) * (p_max - p_min)) / 2) + p_min
     return p
 
 
@@ -416,36 +419,36 @@ def total_loss(model, data, device, rho, mu, p_min, p_max, grank):
     s22 = output[:,4]
     s12 = output[:,5]
 
-    x = inputs[:,0]
-    y = inputs[:,1]
-    t = inputs[:,2]
+    x = (inputs[:,0],)
+    y = (inputs[:,1],)
+    t = (inputs[:,2],)
 
-    x = torch.reshape(x, (x.shape[0],1))
-    y = torch.reshape(y, (y.shape[0],1))
-    t = torch.reshape(t, (t.shape[0],1))
+    #x = (torch.reshape(x, (x.shape[0],1)),)
+    #y = (torch.reshape(y, (y.shape[0],1)),)
+    #t = (torch.reshape(t, (t.shape[0],1)),)
 
-    u = torch.reshape(u, (u.shape[0],1))
-    v = torch.reshape(v, (v.shape[0],1))
-    p_norm = torch.reshape(p_norm, (p_norm.shape[0],1))
+    u1 = torch.reshape(u, (u.shape[0],1))
+    v1 = torch.reshape(v, (v.shape[0],1))
+    #p_norm = torch.reshape(p_norm, (p_norm.shape[0],1))
 
     p = denormalize(p_norm, p_max, p_min)
-    s11 = torch.reshape(s11, (s11.shape[0],1))
-    s22 =  torch.reshape(s22, (s22.shape[0],1))
-    s12 = torch.reshape(s12, (s12.shape[0],1))
+    #s11 = torch.reshape(s11, (s11.shape[0],1))
+    #s22 =  torch.reshape(s22, (s22.shape[0],1))
+    #s12 = torch.reshape(s12, (s12.shape[0],1))
 
-    ux = torch.gradient(u, spacing = x)
-    uy = torch.gradient(u, spacing = y)
-    ut = torch.gradient(u, spacing = t)
+    ux = torch.gradient(u, spacing = 0.1, edge_order=2)[0]
+    uy = torch.gradient(u, spacing = 0.1, edge_order=2)[0]
+    ut = torch.gradient(u, spacing = 1, edge_order=2)[0]
     
-    vx = torch.gradient(v, spacing = x)
-    vy = torch.gradient(v, spacing = y)
-    vt = torch.gradient(v, spacing = t)
+    vx = torch.gradient(v, spacing = 0.1, edge_order=2)[0]
+    vy = torch.gradient(v, spacing = 0.1, edge_order=2)[0]
+    vt = torch.gradient(v, spacing = 1, edge_order=2)[0]
 
-    s11_x = torch.gradient(s11, spacing = x)
-    s22_y = torch.gradeint(s22, spacing = y)
+    s11_x = torch.gradient(s11, spacing = 0.1, edge_order=2)[0]
+    s22_y = torch.gradient(s22, spacing = 0.1, edge_order=2)[0]
 
-    s12_x = torch.gradient(s12, spacing = x)
-    s12_y = torch.gradient(s12, spacing = y)  
+    s12_x = torch.gradient(s12, spacing = 0.1, edge_order=2)[0]
+    s12_y = torch.gradient(s12, spacing = 0.1, edge_order=2)[0]  
 
     ut =  torch.reshape(ut, (ut.shape[0],1))
     vt =  torch.reshape(vt, (vt.shape[0],1))
@@ -454,8 +457,8 @@ def total_loss(model, data, device, rho, mu, p_min, p_max, grank):
     vx = torch.reshape(vx, (vx.shape[0],1))
     vy = torch.reshape(vy, (vy.shape[0],1))
 
-    px = torch.gradient(p, spacing = x)
-    py = torch.gradient(p, spacing = y)
+    px = torch.gradient(p, spacing = 0.1)[0]
+    py = torch.gradient(p, spacing = 0.1)[0]
 
     px =  torch.reshape(px, (px.shape[0],1)) 
     py = torch.reshape(py, (py.shape[0],1))
@@ -468,13 +471,22 @@ def total_loss(model, data, device, rho, mu, p_min, p_max, grank):
     continuity = ux + vy
     #ns1 = ut + torch.mul(u,ux) + torch.mul(v,uy) + (1/rho)*px*(p_max - p_min)/2 - nu*(u_xx + u_yy)
     #ns2 = vt + torch.mul(u,vx) + torch.mul(v,vy) + (1/rho)*py*(p_max - p_min)/2 - nu*(v_xx + v_yy)
-
-    fu = rho*ut + rho*(torch.mul(u,ux) + torch.mul(v,uy)) - s11_x - s12_y
-    fv = rho*vt + rho*(torch.mul(u,vx) + torch.mul(v,vy)) - s12_x - s22_y
     
-    if grank==0:
-        print('first', fu.shape)
-        print('second',fv.shape)
+    fu = rho*ut + rho*(torch.mul(u1,ux) + torch.mul(v1,uy)) - s11_x - s12_y
+    fv = rho*vt + rho*(torch.mul(u1,vx) + torch.mul(v1,vy)) - s12_x - s22_y
+    
+    '''if grank ==0:
+        print('v',v)
+        print('y',y)
+        print('ux',ux)
+        print('vy',vy)
+        print('cont', continuity)
+        print('fu', fu)
+        print('fv', fv)
+    '''
+    #if grank==0:
+        #print('first', fu.shape)
+        #print('second',fv.shape)
     
     f_s11 = - p_max*p + 2*mu*ux - s11
     f_s22 = - p_max*p + 2*mu*vy - s22
@@ -572,7 +584,7 @@ def main():
         if args.testrun:
             torch.cuda.manual_seed(args.nseed)
 
-    train_data_i, test_data_i, X_in, V_p_star_i, p_max, p_min = h5_loader('./data/data_Taylor_Green_Vortex_reduced_0.h5')
+    train_data_i, test_data_i, X_initial, V_p_star_i, p_max, p_min = h5_loader('./data/data_Taylor_Green_Vortex_reduced_0.h5')
     
     '''u_min = V_p_star[:,0].min()
     u_max = V_p_star[:,0].max()
@@ -580,6 +592,9 @@ def main():
     v_max = V_p_star[:,1].max()
     p_min = V_p_star[:,2].min()
     p_max = V_p_star[:,2].max()'''
+    
+    train_data_i = torch.from_numpy(train_data_i).float().to(device)
+    test_data_i = torch.from_numpy(test_data_i).float().to(device)
 
     rho = 1.0
     mu = 0.01
@@ -597,7 +612,7 @@ def main():
     args.shuff = args.shuff and not args.testrun
     train_sampler = torch.utils.data.distributed.DistributedSampler(dataset = GenerateDataset([x for x in range(train_len)], path),
                             num_replicas=gwsize, rank=grank, shuffle=True)
-    test_sampler = torch.utils.data.distributed.DistributedSampler(dataset = TestDataset([x for x in range(test_len)]),
+    test_sampler = torch.utils.data.distributed.DistributedSampler(dataset = TestDataset([x for x in range(test_len)], path),
                             num_replicas=gwsize, rank=grank, shuffle=True)
 
     # distribute dataset to workers
@@ -612,7 +627,7 @@ def main():
                                                num_workers=args.nworker, pin_memory=False,
                                                persistent_workers=pers_w, drop_last=True,
                                                prefetch_factor=args.prefetch, **kwargs)
-    test_loader = torch.utils.data.DataLoader(dataset = TestDataset([x for x in range(test_len)]), batch_size=2,
+    test_loader = torch.utils.data.DataLoader(dataset = TestDataset([x for x in range(test_len)], path), batch_size=2,
                                               sampler=test_sampler, num_workers=args.nworker, pin_memory=False,
                                               persistent_workers=pers_w, drop_last=True,
                                               prefetch_factor=args.prefetch, **kwargs)
