@@ -195,9 +195,9 @@ class Preprocessing_Taylor_Green():
         p_train = self.pressure(X_train1)
         p_test = self.pressure(X_test1)
 
-        u_train, v_train, p_train = self.normalize(u_train, v_train,p_train)
+        #u_train, v_train, p_train = self.normalize(u_train, v_train,p_train)
 
-        u_test, v_test, p_test = self.normalize(u_test, v_test, p_test)
+        #u_test, v_test, p_test = self.normalize(u_test, v_test, p_test)
 
         '''if flag == "domain":
             flag_mark = 1
@@ -237,7 +237,7 @@ class Preprocessing_Taylor_Green():
 
     def data_generation(self):
 
-        t=1
+        t=5
 
         X_in1, X_left, X_right, X_top, X_bottom = self.X_gen(t)
 
@@ -290,7 +290,7 @@ class Preprocessing_Taylor_Green():
         u_full,v_full = self.velocity(self.X_full)
         p_full = self.pressure(self.X_full)
 
-        u_full, v_full, p_full = self.normalize(u_full, v_full, p_full)
+        #u_full, v_full, p_full = self.normalize(u_full, v_full, p_full)
         V_p_full = np.vstack([u_full, v_full, p_full])
 
         h5 = h5py.File('../data/data_Taylor_Green_Vortex_reduced_'+str(t)+'.h5', 'w')
@@ -359,8 +359,8 @@ def plotting(X, u, v, p):
     u_max = u.max()
     v_max = v.max()
     scale = (u_max + v_max)/(2* p_max)
-    p0 = (-1 + 2*((p -p_min) / (p_max - p_min)))
-    p_orig = p_max*p0
+    #p0 = (-1 + 2*((p -p_min) / (p_max - p_min)))
+    #p_orig = p_max*p0
 
     print(u0.shape)
 
@@ -389,7 +389,7 @@ def plotting(X, u, v, p):
     plt.colorbar()
     plt.show()
 
-    fig, ax = plt.subplots(1, 4)
+    fig, ax = plt.subplots(1, 3)
     c1 = ax[0].tricontourf(X_l[:,0],X_l[:,1],u0, levels=7)
     fig.colorbar(c1, ax=ax[0])
     ax[0].set_title('u_test', y=-0.1)
@@ -404,9 +404,9 @@ def plotting(X, u, v, p):
     fig.colorbar(c3, ax=ax[2])
     ax[2].set_title('p_test', y=-0.1)
 
-    c4 = ax[3].tricontourf(X_l[:, 0], X_l[:, 1], p_orig, levels=7)
+    '''c4 = ax[3].tricontourf(X_l[:, 0], X_l[:, 1], p_orig, levels=7)
     fig.colorbar(c4, ax=ax[3])
-    ax[2].set_title('p_test_orig', y=-0.1)
+    ax[2].set_title('p_test_orig', y=-0.1)'''
 
 
     plt.show()
