@@ -85,14 +85,14 @@ class Taylor_green_vortex_PINN(nn.Module):
             a = self.fc4(a)
 
             '''
-        for i in range(len(self.layers) - 1):
+        for i in range(len(self.layers) - 2):
             z = self.linears[i](a)
 
             a = self.activation(z)
 
-        #a = self.linears[-2](a)        
+        a = self.linears[-2](a)        
 
-        #a = self.activation(a)
+        a = self.activation(a)
 
         a = self.linears[-1](a)
 
@@ -299,7 +299,7 @@ def denormalize_full(V_p_norm, p_min, p_max):
     return u_norm, v_norm, p_norm
 
 # save state of the training
-def save_state(epoch,distrib_model,loss_acc,optimizer,res_name, grank, gwsize, is_best):#,grank,gwsize,is_best):
+def save_state(epoch,distrib_model,loss_acc,optimizer,res_name, grank, gwsize, is_best, loss_acc_list, rel_error_list, initial_err_list):#,grank,gwsize,is_best):
     rt = time.time()
     # find if is_best happened in any worker
     is_best_m = par_allgather_obj(is_best,gwsize)
@@ -312,7 +312,10 @@ def save_state(epoch,distrib_model,loss_acc,optimizer,res_name, grank, gwsize, i
         state = {'epoch': epoch + 1,
                 'state_dict': distrib_model.state_dict(),
                 'best_acc': loss_acc,
-                'optimizer' : optimizer.state_dict()}
+                'optimizer' : optimizer.state_dict(),
+                'loss_acc_list': loss_acc_list,
+                'rel_error_list': rel_error_list,
+                'initial_err_list': initial_err_list}
 
         # write on worker with is_best
         if grank == is_best_rank:
@@ -390,16 +393,6 @@ def par_allgather_obj(obj,gwsize):
     dist.all_gather_object(res,obj,group=None)
     return res
 
-def loss_initial(model, train_data_i, device):
-    loss_function = nn.MSELoss()
-
-    inputs = train_data_i[:,0:3].to(device)
-    exact = train_data_i[:,3:6].to(device)
-
-    output = model(inputs)
-
-    return loss_function(output[:,0:3], exact)
-
 def total_loss(model, data, device, rho, mu, p_min, p_max, grank):
 
     loss_function = nn.MSELoss()
@@ -411,39 +404,64 @@ def total_loss(model, data, device, rho, mu, p_min, p_max, grank):
     exact = data[:,3:6].to(device)
 
     #print('exact', exact)
-
+    
     g = inputs.clone()
     g.requires_grad = True
-
+   
     #global output
-    #output = model(g)
-    output_i = model(inputs_i)
-    
-    '''
+    output = model(g)
+    #output_i = model(inputs_i)
+         
     u = output[:,0]
     v = output[:,1]
-    p_norm = output[:,2]
+    p = output[:,2]
     s11 = output[:,3]
     s22 = output[:,4]
     s12 = output[:,5]
 
-    x = (inputs[:,0],)
-    y = (inputs[:,1],)
-    t = (inputs[:,2],)
+    '''
+    x = inputs[:,0]
+    y = inputs[:,1]
+    t = inputs[:,2]
 
-    #x = (torch.reshape(x, (x.shape[0],1)),)
-    #y = (torch.reshape(y, (y.shape[0],1)),)
-    #t = (torch.reshape(t, (t.shape[0],1)),)
+    x = (torch.reshape(x, (x.shape[0],1)),)
+    y = (torch.reshape(y, (y.shape[0],1)),)
+    t = (torch.reshape(t, (t.shape[0],1)),)
 
-    u1 = torch.reshape(u, (u.shape[0],1))
-    v1 = torch.reshape(v, (v.shape[0],1))
-    #p_norm = torch.reshape(p_norm, (p_norm.shape[0],1))
+    '''
+    
+    u = torch.reshape(u, (u.shape[0],1))
+    v = torch.reshape(v, (v.shape[0],1))
+    p = torch.reshape(p, (p.shape[0],1))
 
-    p = denormalize(p_norm, p_max, p_min)
-    #s11 = torch.reshape(s11, (s11.shape[0],1))
-    #s22 =  torch.reshape(s22, (s22.shape[0],1))
-    #s12 = torch.reshape(s12, (s12.shape[0],1))
+    #p = denormalize(p_norm, p_max, p_min)
+    s11 = torch.reshape(s11, (s11.shape[0],1))
+    s22 =  torch.reshape(s22, (s22.shape[0],1))
+    s12 = torch.reshape(s12, (s12.shape[0],1))
 
+    u_x_y_t = torch.autograd.grad(u,g,torch.ones([inputs.shape[0], 1]).to(device), create_graph=True)[0]
+    v_x_y_t = torch.autograd.grad(v,g,torch.ones([inputs.shape[0], 1]).to(device), create_graph=True)[0]
+    s_11_x_y_t = torch.autograd.grad(s11,g,torch.ones([inputs.shape[0], 1]).to(device), create_graph=True)[0]
+    s_12_x_y_t = torch.autograd.grad(s12,g,torch.ones([inputs.shape[0], 1]).to(device), create_graph=True)[0]
+    s_22_x_y_t = torch.autograd.grad(s22,g,torch.ones([inputs.shape[0], 1]).to(device), create_graph=True)[0]
+
+    #if grank == 0:
+        #print('uxyt', u_x_y_t.shape)
+    
+    ux = u_x_y_t[:,0]
+    uy = u_x_y_t[:,1]
+    ut = u_x_y_t[:,2]
+
+    vx = v_x_y_t[:,0]
+    vy = v_x_y_t[:,1]
+    vt = v_x_y_t[:,2]
+
+    s11_x = s_11_x_y_t[:,0]
+    s22_y = s_22_x_y_t[:,1]
+    s12_x = s_12_x_y_t[:,0]
+    s12_y = s_12_x_y_t[:,1]
+
+    '''
     ux = torch.gradient(u, spacing = 0.1, edge_order=2)[0]
     uy = torch.gradient(u, spacing = 0.1, edge_order=2)[0]
     ut = torch.gradient(u, spacing = 1, edge_order=2)[0]
@@ -457,6 +475,7 @@ def total_loss(model, data, device, rho, mu, p_min, p_max, grank):
 
     s12_x = torch.gradient(s12, spacing = 0.1, edge_order=2)[0]
     s12_y = torch.gradient(s12, spacing = 0.1, edge_order=2)[0]  
+    '''
 
     ut =  torch.reshape(ut, (ut.shape[0],1))
     vt =  torch.reshape(vt, (vt.shape[0],1))
@@ -464,12 +483,6 @@ def total_loss(model, data, device, rho, mu, p_min, p_max, grank):
     uy = torch.reshape(uy, (uy.shape[0],1))
     vx = torch.reshape(vx, (vx.shape[0],1))
     vy = torch.reshape(vy, (vy.shape[0],1))
-
-    px = torch.gradient(p, spacing = 0.1)[0]
-    py = torch.gradient(p, spacing = 0.1)[0]
-
-    px =  torch.reshape(px, (px.shape[0],1)) 
-    py = torch.reshape(py, (py.shape[0],1))
 
     s11_x = torch.reshape(s11_x, (s11_x.shape[0],1))
     s22_y =  torch.reshape(s22_y, (s22_y.shape[0],1))
@@ -480,17 +493,21 @@ def total_loss(model, data, device, rho, mu, p_min, p_max, grank):
     #ns1 = ut + torch.mul(u,ux) + torch.mul(v,uy) + (1/rho)*px*(p_max - p_min)/2 - nu*(u_xx + u_yy)
     #ns2 = vt + torch.mul(u,vx) + torch.mul(v,vy) + (1/rho)*py*(p_max - p_min)/2 - nu*(v_xx + v_yy)
     
-    fu = rho*ut + rho*(torch.mul(u1,ux) + torch.mul(v1,uy)) - s11_x - s12_y
-    fv = rho*vt + rho*(torch.mul(u1,vx) + torch.mul(v1,vy)) - s12_x - s22_y
-    
-    
-    #if grank==0:
-        #print('first', fu.shape)
-        #print('second',fv.shape)
-    
-    f_s11 = - p_max*p + 2*mu*ux - s11
-    f_s22 = - p_max*p + 2*mu*vy - s22
+    fu = rho*ut + rho*(torch.mul(u,ux) + torch.mul(v,uy)) - s11_x - s12_y
+    fv = rho*vt + rho*(torch.mul(u,vx) + torch.mul(v,vy)) - s12_x - s22_y
+        
+    f_s11 = - p + 2*mu*ux - s11
+    f_s22 = - p + 2*mu*vy - s22
     f_s12 = mu*(uy+vx) - s12
+    
+    '''if grank==0:
+        print('first', continuity.shape)
+        print('second',fu.shape)
+        print('second',fv.shape)
+        print('second',f_s11.shape)
+        print('second',f_s22.shape)
+        print('second',f_s12.shape)
+    '''
 
     target1 = torch.zeros_like(continuity, device=device)
     target2 = torch.zeros_like(fu, device=device)
@@ -506,14 +523,14 @@ def total_loss(model, data, device, rho, mu, p_min, p_max, grank):
     loss_fs22 = loss_function(f_s22, target5)
     loss_fs12 = loss_function(f_s12, target6)
     loss_variable = loss_function(output[:,0:3], exact)
-    '''    
-    loss_initial = loss_function(output_i[:,0:3], exact_i)
+        
+    #loss_initial = loss_function(output_i[:,0:3], exact_i)
     #if grank==0:
         #print("\tloss_continuity :", loss_continuity, "loss_momentum1 :", loss_ns1, "loss_momentum2 :", loss_ns2, "loss_variable: ", loss_variable)
 
-    #loss =  loss_continuity + loss_fu + loss_fv + loss_fs11 + loss_fs22 + loss_fs12 + loss_variable + loss_initial
+    loss =  loss_continuity + loss_fu + loss_fv + loss_fs11 + loss_fs22 + loss_fs12 + loss_variable 
 
-    loss = loss_initial
+    #loss = loss_initial
 
     return loss
 
@@ -601,7 +618,7 @@ def main():
     mu = 0.01
     
     path1 = './data/data_Taylor_Green_Vortex_reduced_0.h5'
-    path = './data/data_Taylor_Green_Vortex_reduced_1.h5'
+    path = './data/data_Taylor_Green_Vortex_reduced_5.h5'
 
     train_data, test_data, X_in, V_p_star, p_max, p_min = h5_loader(path1)
 
@@ -612,7 +629,7 @@ def main():
 
     # restricts data loading to a subset of the dataset exclusive to the current process
     args.shuff = args.shuff and not args.testrun
-    train_sampler = torch.utils.data.distributed.DistributedSampler(dataset = GenerateDataset([x for x in range(train_len)], path,path1),
+    train_sampler = torch.utils.data.distributed.DistributedSampler(dataset = GenerateDataset([x for x in range(train_len)], path1,path1),
                             num_replicas=gwsize, rank=grank, shuffle=True)
     test_sampler = torch.utils.data.distributed.DistributedSampler(dataset = TestDataset([x for x in range(test_len)], path, path1),
                             num_replicas=gwsize, rank=grank, shuffle=True)
@@ -624,7 +641,7 @@ def main():
     # deterministic testrun - the same dataset each run
     kwargs = {'worker_init_fn': seed_worker, 'generator': g} if args.testrun else {}
 
-    train_loader = torch.utils.data.DataLoader(dataset = GenerateDataset([x for x in range(train_len)], path, path1), batch_size=args.batch_size,
+    train_loader = torch.utils.data.DataLoader(dataset = GenerateDataset([x for x in range(train_len)], path1, path1), batch_size=args.batch_size,
                                                sampler = train_sampler,
                                                num_workers=args.nworker, pin_memory=False,
                                                persistent_workers=pers_w, drop_last=True,
@@ -711,7 +728,7 @@ def main():
     et = time.time()
     
     test_acc_list = []
-    
+    lr_list = []
     for epoch in range(start_epoch, args.epochs + 1):
 
         lt = time.time()
@@ -729,14 +746,16 @@ def main():
         acc_test, rel_err, error_initial = test(distrib_model, device, test_loader, grank, gwsize, rho, mu)
 
         # lr Scheduler
-        scheduler.step()
+        #scheduler.step()
+        
+        latest_lr = scheduler.get_last_lr()
         
         if grank == 0 and lrank == 0:
+            print(latest_lr)
             print('Epoch finished')
             print('Epoch: {:03d}, Loss: {:.5f}, Test MSE: {:.5f}, Test Error: {:.5f}, Initial_Error: {:.5f}'.
                 format(epoch, loss_acc, acc_test, rel_err, error_initial))
-        lr_list = []
-        latest_lr = scheduler.get_last_lr()
+                
         lr_list.append(latest_lr)
 
         test_acc_list.append(acc_test)
@@ -783,7 +802,7 @@ def main():
     #finalise training
     # save final state
     if not args.benchrun:
-        save_state(epoch, model, loss_acc, optimizer, res_name, grank, gwsize, True)
+        save_state(epoch, model, loss_acc, optimizer, res_name, grank, gwsize, True, loss_acc_list, rel_error_list, initial_err_list)
         #save_state(epoch, model, loss_acc, optimizer, res_name)
     dist.barrier()
 

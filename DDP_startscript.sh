@@ -23,7 +23,7 @@
 # parameters
 debug=false # do debug
 bs=4       # batch-size
-epochs=10    # epochs
+epochs=15000    # epochs
 lr=0.001     # learning rate
 gamma=0.99 # gamma for decay
 restartInt=100
