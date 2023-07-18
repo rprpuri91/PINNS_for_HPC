@@ -237,7 +237,7 @@ class Preprocessing_Taylor_Green():
 
     def data_generation(self):
 
-        t=5
+        t=20
 
         X_in1, X_left, X_right, X_top, X_bottom = self.X_gen(t)
 

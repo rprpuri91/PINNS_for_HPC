@@ -299,7 +299,7 @@ def denormalize_full(V_p_norm, p_min, p_max):
     return u_norm, v_norm, p_norm
 
 # save state of the training
-def save_state(epoch,distrib_model,loss_acc,optimizer,res_name, grank, gwsize, is_best, loss_acc_list, rel_error_list, initial_err_list):#,grank,gwsize,is_best):
+def save_state(i,epoch,distrib_model,loss_acc,optimizer,res_name, grank, gwsize, is_best, loss_acc_list, rel_error_list, initial_err_list):#,grank,gwsize,is_best):
     rt = time.time()
     # find if is_best happened in any worker
     is_best_m = par_allgather_obj(is_best,gwsize)
@@ -310,6 +310,7 @@ def save_state(epoch,distrib_model,loss_acc,optimizer,res_name, grank, gwsize, i
 
         # collect state
         state = {'epoch': epoch + 1,
+                 'start': i,
                 'state_dict': distrib_model.state_dict(),
                 'best_acc': loss_acc,
                 'optimizer' : optimizer.state_dict(),
@@ -602,209 +603,206 @@ def main():
         if args.testrun:
             torch.cuda.manual_seed(args.nseed)
 
-    #train_data_i, test_data_i, X_initial, V_p_star_i, p_max, p_min = h5_loader('./data/data_Taylor_Green_Vortex_reduced_0.h5')
-    
-    '''u_min = V_p_star[:,0].min()
-    u_max = V_p_star[:,0].max()
-    v_min = V_p_star[:,1].min()
-    v_max = V_p_star[:,1].max()
-    p_min = V_p_star[:,2].min()
-    p_max = V_p_star[:,2].max()'''
-    
-    #train_data_i = torch.from_numpy(train_data_i).float().to(device)
-    #test_data_i = torch.from_numpy(test_data_i).float().to(device)
 
     rho = 1.0
     mu = 0.01
-    
-    path1 = './data/data_Taylor_Green_Vortex_reduced_0.h5'
-    path = './data/data_Taylor_Green_Vortex_reduced_5.h5'
 
-    train_data, test_data, X_in, V_p_star, p_max, p_min = h5_loader(path1)
-
-    X_in = torch.from_numpy(X_in).float().to(device)
-    
-    train_len = len(train_data)
-    test_len = len(test_data)
-
-    # restricts data loading to a subset of the dataset exclusive to the current process
-    args.shuff = args.shuff and not args.testrun
-    train_sampler = torch.utils.data.distributed.DistributedSampler(dataset = GenerateDataset([x for x in range(train_len)], path1,path1),
-                            num_replicas=gwsize, rank=grank, shuffle=True)
-    test_sampler = torch.utils.data.distributed.DistributedSampler(dataset = TestDataset([x for x in range(test_len)], path, path1),
-                            num_replicas=gwsize, rank=grank, shuffle=True)
-
-    # distribute dataset to workers
-    # persistent workers
-    pers_w = True if args.nworker>1 else False
-
-    # deterministic testrun - the same dataset each run
-    kwargs = {'worker_init_fn': seed_worker, 'generator': g} if args.testrun else {}
-
-    train_loader = torch.utils.data.DataLoader(dataset = GenerateDataset([x for x in range(train_len)], path1, path1), batch_size=args.batch_size,
-                                               sampler = train_sampler,
-                                               num_workers=args.nworker, pin_memory=False,
-                                               persistent_workers=pers_w, drop_last=True,
-                                               prefetch_factor=args.prefetch, **kwargs)
-    test_loader = torch.utils.data.DataLoader(dataset = TestDataset([x for x in range(test_len)], path, path1), batch_size=2,
-                                              sampler=test_sampler, num_workers=args.nworker, pin_memory=False,
-                                              persistent_workers=pers_w, drop_last=True,
-                                              prefetch_factor=args.prefetch, **kwargs)
-
-    '''train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size,
-                                               pin_memory=True, drop_last=True,
-                                               prefetch_factor=args.prefetch)
-    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=2,
-                                              pin_memory=True, drop_last=True,
-                                              prefetch_factor=args.prefetch)'''
-
-    if grank==0:
-        print(f'TIMER: read data: {time.time()-st} s\n')
+    if grank == 0:
+        print(f'TIMER: read data: {time.time() - st} s\n')
 
     # create model
 
     layers = np.array([3, 300, 300, 300, 300, 300, 6])
     model = Taylor_green_vortex_PINN(layers).to(device)
-   
+
     print(device)
     # distribute model too workers
+
+
     if args.cuda:
-        distrib_model = torch.nn.parallel.DistributedDataParallel(model,\
-                        device_ids = [device], output_device=device, find_unused_parameters = False)
+        distrib_model = torch.nn.parallel.DistributedDataParallel(model, \
+                                                                  device_ids=[device], output_device=device,
+                                                                  find_unused_parameters=False)
     else:
-        distrib_model = torch.nn.parallel.DistributedDataParallel(model, find_unused_parameters = False)
+        distrib_model = torch.nn.parallel.DistributedDataParallel(model, find_unused_parameters=False)
 
-    '''if args.cuda:
-        distrib_model = nn.parallel.DistributedDataParallel(model,\
-            device_ids=[device], output_device=device)
-    else:
-        distrib_model = nn.parallel.DistributedDataParallel(model)'''
-
-    # optimizer
+        # optimizer
     optimizer = torch.optim.SGD(distrib_model.parameters(), lr=args.lr)
     scheduler_lr = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=args.gamma)
-    scheduler_cosine = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max = args.epochs)
-    
+    scheduler_cosine = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs)
+
     scheduler = scheduler_cosine
 
-    # resume state
-    start_epoch = 1
+    t = np.arange(0,20,5)
+
+    start = 0
+    start_epoch=1
     best_acc = np.Inf
     loss_acc_list = []
     rel_error_list = []
     initial_err_list = []
+
+    # resume state
     res_name = 'checkpoint_red.pth.tar'
     if os.path.isfile(res_name) and not args.benchrun:
         try:
             dist.barrier()
             # Map model to be loaded to specified single gpu.
             loc = {'cuda:%d' % 0: 'cuda:%d' % lrank} if args.cuda else {'cpu:%d' % 0: 'cpu:%d' % lrank}
-            checkpoint = torch.load(program_dir + '/' + res_name , map_location=loc)
+            checkpoint = torch.load(program_dir + '/' + res_name, map_location=loc)
+            start = checkpoint['start']
             start_epoch = checkpoint['epoch']
             best_acc = checkpoint['best_acc']
             loss_acc_list = checkpoint['loss_acc_list']
             rel_error_list = checkpoint['rel_error_list']
             initial_err_list = checkpoint['initial_err_list']
-            model.load_state_dict(checkpoint['state_dict'])
+            distrib_model.load_state_dict(checkpoint['state_dict'])
             optimizer.load_state_dict(checkpoint['optimizer'])
             if grank == 0:
                 print(f'WARNING: restarting from {start_epoch} epoch')
         except:
             if grank == 0:
                 print(f'WARNING: restart file cannot be loaded, restarting!')
-    if start_epoch >= args.epochs:
-        if grank == 0:
-            print(f'WARNING: given epochs are less than the one in the restart file!\n'
-                  f'WARNING: SYS.EXIT is issued')
-        dist.destroy_process_group()
-        sys.exit()
 
-    # start training/testing loop
-    if grank==0:
-        print('TIMER broadcast:', time.time()-st, 's')
-        print(f'\nDEBUG: start training')
-        print(f'------------------------------------------')
 
-    et = time.time()
-    
-    test_acc_list = []
-    lr_list = []
-    for epoch in range(start_epoch, args.epochs + 1):
-
-        lt = time.time()
-
-        #training
-        if args.benchrun and epoch==args.epochs:
-            with torch.autograd.profiler.profile(use_cuda=args.cuda, profile_memory=True) as prof:
-                loss_acc = train(distrib_model, device, train_loader, optimizer,epoch, grank, gwsize, rho, mu, p_max,p_min)
-        else:
-            loss_acc = train(distrib_model, device, train_loader, optimizer, epoch, grank, gwsize, rho, mu, p_max, p_min)
-
-        loss_acc_list.append(loss_acc)
-
-        # testing
-        acc_test, rel_err, error_initial = test(distrib_model, device, test_loader, grank, gwsize, rho, mu)
-
-        # lr Scheduler
-        #scheduler.step()
-        
-        latest_lr = scheduler.get_last_lr()
-        
-        if grank == 0 and lrank == 0:
-            print(latest_lr)
-            print('Epoch finished')
-            print('Epoch: {:03d}, Loss: {:.5f}, Test MSE: {:.5f}, Test Error: {:.5f}, Initial_Error: {:.5f}'.
-                format(epoch, loss_acc, acc_test, rel_err, error_initial))
-                
-        lr_list.append(latest_lr)
-
-        test_acc_list.append(acc_test)
-        rel_error_list.append(rel_err)
-        initial_err_list.append(error_initial)
-
-        if epoch == start_epoch:
-            first_ep_t = time.time() - lt
-
-        # final epoch
-        if epoch + 1 == args.epochs:
-            train_loader.last_epoch = True
-            test_loader.last_epoch = True
+    for i in range(start,len(t)-1):
 
         if grank==0:
-            print(f'\n--------------------------------------------------------')
-            print(f'TIMER: epoch time:', time.time()-lt, 's')
-            print(f'DEBUG: accuracy:', acc_test, '%')
-            if args.benchrun and epoch==args.epoch:
-                print(f'\n----------------------------------------')
-                print(f'DEBUG: benchmark of last epoch:\n')
-                what1 = 'cuda' if args.cuda else 'cpu'
-                print(prof.key_averages().table(sort_by='self_'+str(what1)+'_time_total'))
+            print('Starting training for t=',t[i+1])
 
-        # if a better state is found
-        is_best = loss_acc < best_acc
-        if epoch % args.restart_int == 0 and not args.benchrun:
+        path1 = './data/data_Taylor_Green_Vortex_reduced_'+str(t[i])+'.h5'
+        path = './data/data_Taylor_Green_Vortex_reduced_'+str(t[i+1])+'.h5'
 
-            save_state(epoch, model, loss_acc, optimizer, res_name, grank, gwsize, is_best, loss_acc_list, rel_error_list, initial_err_list)
-            #save_state(epoch, model, loss_acc, optimizer, res_name)
-            best_acc = min(loss_acc, best_acc)
-            V_p_pred_norm = distrib_model(X_in)
-            u_pred, v_pred, p_pred = denormalize_full(V_p_pred_norm[:,0:3], p_min, p_max)
-            result = [V_p_star,X_in,V_p_pred_norm, u_pred,v_pred, p_pred, loss_acc_list, rel_error_list, lr_list, initial_err_list]
+        train_data, test_data, X_in, V_p_star, p_max, p_min = h5_loader(path)
+
+        X_in = torch.from_numpy(X_in).float().to(device)
+
+        train_len = len(train_data)
+        test_len = len(test_data)
+
+        # restricts data loading to a subset of the dataset exclusive to the current process
+        args.shuff = args.shuff and not args.testrun
+        train_sampler = torch.utils.data.distributed.DistributedSampler(dataset = GenerateDataset([x for x in range(train_len)], path,path1),
+                                num_replicas=gwsize, rank=grank, shuffle=True)
+        test_sampler = torch.utils.data.distributed.DistributedSampler(dataset = TestDataset([x for x in range(test_len)], path, path1),
+                                num_replicas=gwsize, rank=grank, shuffle=True)
+
+        # distribute dataset to workers
+        # persistent workers
+        pers_w = True if args.nworker>1 else False
+
+        # deterministic testrun - the same dataset each run
+        kwargs = {'worker_init_fn': seed_worker, 'generator': g} if args.testrun else {}
+
+        train_loader = torch.utils.data.DataLoader(dataset = GenerateDataset([x for x in range(train_len)], path, path1), batch_size=args.batch_size,
+                                                   sampler = train_sampler,
+                                                   num_workers=args.nworker, pin_memory=False,
+                                                   persistent_workers=pers_w, drop_last=True,
+                                                   prefetch_factor=args.prefetch, **kwargs)
+        test_loader = torch.utils.data.DataLoader(dataset = TestDataset([x for x in range(test_len)], path, path1), batch_size=2,
+                                                  sampler=test_sampler, num_workers=args.nworker, pin_memory=False,
+                                                  persistent_workers=pers_w, drop_last=True,
+                                                  prefetch_factor=args.prefetch, **kwargs)
+
+
+        if start_epoch >= args.epochs:
             if grank == 0:
-                print('Saving results at epoch: ',epoch)
-            f = open('./result/result_Taylor_green_vortex_reduced'+str(epoch)+'.pkl', 'wb')
-            pickle.dump(result, f)
-            f.close()
+                print(f'WARNING: given epochs are less than the one in the restart file!\n'
+                      f'WARNING: SYS.EXIT is issued')
+            dist.destroy_process_group()
+            sys.exit()
+
+        # start training/testing loop
+        if grank==0:
+            print('TIMER broadcast:', time.time()-st, 's')
+            print(f'\nDEBUG: start training')
+            print(f'------------------------------------------')
+
+        et = time.time()
+
+        test_acc_list = []
+        lr_list = []
+        for epoch in range(start_epoch, args.epochs + 1):
+
+            lt = time.time()
+
+            #training
+            if args.benchrun and epoch==args.epochs:
+                with torch.autograd.profiler.profile(use_cuda=args.cuda, profile_memory=True) as prof:
+                    loss_acc = train(distrib_model, device, train_loader, optimizer,epoch, grank, gwsize, rho, mu, p_max,p_min)
+            else:
+                loss_acc = train(distrib_model, device, train_loader, optimizer, epoch, grank, gwsize, rho, mu, p_max, p_min)
+
+            loss_acc_list.append(loss_acc)
+
+            # testing
+            acc_test, rel_err, error_initial = test(distrib_model, device, test_loader, grank, gwsize, rho, mu)
+
+            # lr Scheduler
+            #scheduler.step()
+
+            latest_lr = scheduler.get_last_lr()
+
+            if grank == 0 and lrank == 0:
+                print(latest_lr)
+                print('Epoch finished')
+                print('Epoch: {:03d}, Loss: {:.5f}, Test MSE: {:.5f}, Test Error: {:.5f}, Initial_Error: {:.5f}'.
+                    format(epoch, loss_acc, acc_test, rel_err, error_initial))
+
+            lr_list.append(latest_lr)
+
+            test_acc_list.append(acc_test)
+            rel_error_list.append(rel_err)
+            initial_err_list.append(error_initial)
+
+            if epoch == start_epoch:
+                first_ep_t = time.time() - lt
+
+            # final epoch
+            if epoch + 1 == args.epochs:
+                train_loader.last_epoch = True
+                test_loader.last_epoch = True
+
+            if grank==0:
+                print(f'\n--------------------------------------------------------')
+                print(f'TIMER: epoch time:', time.time()-lt, 's')
+                print(f'DEBUG: accuracy:', acc_test, '%')
+                if args.benchrun and epoch==args.epoch:
+                    print(f'\n----------------------------------------')
+                    print(f'DEBUG: benchmark of last epoch:\n')
+                    what1 = 'cuda' if args.cuda else 'cpu'
+                    print(prof.key_averages().table(sort_by='self_'+str(what1)+'_time_total'))
+
+            # if a better state is found
+            is_best = loss_acc < best_acc
+            if epoch % args.restart_int == 0 and not args.benchrun:
+
+                save_state(i,epoch, distrib_model, loss_acc, optimizer, res_name, grank, gwsize, is_best, loss_acc_list, rel_error_list, initial_err_list)
+                #save_state(epoch, model, loss_acc, optimizer, res_name)
+                best_acc = min(loss_acc, best_acc)
+                V_p_pred_norm = distrib_model(X_in)
+                u_pred, v_pred, p_pred = denormalize_full(V_p_pred_norm[:,0:3], p_min, p_max)
+                result = [V_p_star,X_in,V_p_pred_norm, u_pred,v_pred, p_pred, loss_acc_list, rel_error_list, lr_list, initial_err_list]
+                if grank == 0:
+                    print('Saving results at epoch: ',epoch)
+                f = open('./result/result_Taylor_green_vortex_reduced'+str(t[i])+'_'+str(epoch)+'.pkl', 'wb')
+                pickle.dump(result, f)
+                f.close()
+
+            if grank==0:
+                print(epoch)
+
+        start_epoch = 1
+
+        #finalise training
+        # save final state
+        if not args.benchrun:
+            save_state(epoch, distrib_model, loss_acc, optimizer, res_name, grank, gwsize, True, loss_acc_list, rel_error_list, initial_err_list)
+            #save_state(epoch, model, loss_acc, optimizer, res_name)
+        dist.barrier()
 
         if grank==0:
-            print(epoch)
-
-    #finalise training
-    # save final state
-    if not args.benchrun:
-        save_state(epoch, model, loss_acc, optimizer, res_name, grank, gwsize, True, loss_acc_list, rel_error_list, initial_err_list)
-        #save_state(epoch, model, loss_acc, optimizer, res_name)
-    dist.barrier()
+            print('Sequence finsihed for t=',t[i])
 
 
     if grank == 0:
@@ -817,18 +815,9 @@ def main():
         print(f'TIMER: total testing time: {time.time() - et} s')
 
 
-    #V_p_pred_norm = distrib_model(X_in)
-    #u_pred, v_pred, p_pred = denormalize(V_p_pred_norm[:,0:3], u_min, u_max, v_min, v_max, p_min, p_max)
-
     if grank==0:
         f_time = time.time() - st
         print(f'TIMER: final time: {f_time} s')
-
-    #result = [V_p_star, X_in, V_p_pred_norm, u_pred, v_pred, p_pred, loss_acc_list, acc_test, f_time]
-    #f = open('./result/result_Taylor_green_vortex_reduced.pkl', 'wb')
-
-    #pickle.dump(result, f)
-    #f.close()
 
     # clean-up
     dist.destroy_process_group()
@@ -838,7 +827,3 @@ if __name__ == "__main__":
     sys.exit()
 
 #h5_loader()
-
-
-
-
