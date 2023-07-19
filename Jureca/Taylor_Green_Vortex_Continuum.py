@@ -411,7 +411,7 @@ def total_loss(model, data, device, rho, mu, p_min, p_max, grank):
    
     #global output
     output = model(g)
-    #output_i = model(inputs_i)
+    output_i = model(inputs_i)
          
     u = output[:,0]
     v = output[:,1]
@@ -525,11 +525,11 @@ def total_loss(model, data, device, rho, mu, p_min, p_max, grank):
     loss_fs12 = loss_function(f_s12, target6)
     loss_variable = loss_function(output[:,0:3], exact)
         
-    #loss_initial = loss_function(output_i[:,0:3], exact_i)
+    loss_initial = loss_function(output_i[:,0:3], exact_i)
     #if grank==0:
         #print("\tloss_continuity :", loss_continuity, "loss_momentum1 :", loss_ns1, "loss_momentum2 :", loss_ns2, "loss_variable: ", loss_variable)
 
-    loss =  loss_continuity + loss_fu + loss_fv + loss_fs11 + loss_fs22 + loss_fs12 + loss_variable 
+    loss =  loss_continuity + loss_fu + loss_fv + loss_fs11 + loss_fs22 + loss_fs12 + loss_variable + loss_initial 
 
     #loss = loss_initial
 
@@ -633,7 +633,9 @@ def main():
 
     scheduler = scheduler_cosine
 
-    t = np.arange(0,20,5)
+    t = np.arange(0,20,5).tolist()
+    t.append(20)
+    print(t)
 
     start = 0
     start_epoch=1
@@ -659,13 +661,25 @@ def main():
             distrib_model.load_state_dict(checkpoint['state_dict'])
             optimizer.load_state_dict(checkpoint['optimizer'])
             if grank == 0:
-                print(f'WARNING: restarting from {start_epoch} epoch')
+                print(f'WARNING: restarting from time={start} and {start_epoch} epoch')
         except:
             if grank == 0:
                 print(f'WARNING: restart file cannot be loaded, restarting!')
 
 
     for i in range(start,len(t)-1):
+
+        if start_epoch == args.epochs +1:
+            start_epoch = 1
+            continue
+
+        elif start_epoch > args.epochs +1:
+            if grank == 0:
+                print(f'WARNING: given epochs are less than the one in the restart file!\n'
+                      f'WARNING: SYS.EXIT is issued')
+            dist.destroy_process_group()
+            sys.exit()
+
 
         if grank==0:
             print('Starting training for t=',t[i+1])
@@ -704,13 +718,6 @@ def main():
                                                   persistent_workers=pers_w, drop_last=True,
                                                   prefetch_factor=args.prefetch, **kwargs)
 
-
-        if start_epoch >= args.epochs:
-            if grank == 0:
-                print(f'WARNING: given epochs are less than the one in the restart file!\n'
-                      f'WARNING: SYS.EXIT is issued')
-            dist.destroy_process_group()
-            sys.exit()
 
         # start training/testing loop
         if grank==0:
@@ -772,7 +779,7 @@ def main():
                     print(f'DEBUG: benchmark of last epoch:\n')
                     what1 = 'cuda' if args.cuda else 'cpu'
                     print(prof.key_averages().table(sort_by='self_'+str(what1)+'_time_total'))
-
+i
             # if a better state is found
             is_best = loss_acc < best_acc
             if epoch % args.restart_int == 0 and not args.benchrun:
@@ -797,12 +804,12 @@ def main():
         #finalise training
         # save final state
         if not args.benchrun:
-            save_state(epoch, distrib_model, loss_acc, optimizer, res_name, grank, gwsize, True, loss_acc_list, rel_error_list, initial_err_list)
+            save_state(i,epoch, distrib_model, loss_acc, optimizer, res_name, grank, gwsize, True, loss_acc_list, rel_error_list, initial_err_list)
             #save_state(epoch, model, loss_acc, optimizer, res_name)
         dist.barrier()
 
         if grank==0:
-            print('Sequence finsihed for t=',t[i])
+            print('Sequence finsihed for t=',t[i+1])
 
 
     if grank == 0:
@@ -821,6 +828,66 @@ def main():
 
     # clean-up
     dist.destroy_process_group()
+
+def test(t):
+
+    device = torch.device('cuda' if args.cuda and torch.cuda.is_available() else 'cpu',lrank)
+    if args.cuda:
+        torch.cuda.set_device(lrank)
+        # deterministic testrun
+        if args.testrun:
+            torch.cuda.manual_seed(args.nseed)
+
+    layers = np.array([3, 300, 300, 300, 300, 300, 6])
+    model = Taylor_green_vortex_PINN(layers).to(device)
+
+    print(device)
+    # distribute model too workers
+    
+
+    if args.cuda:
+        distrib_model = torch.nn.parallel.DistributedDataParallel(model, \
+                                                                  device_ids=[device], output_device=device,
+                                                                  find_unused_parameters=False)
+    else:
+        distrib_model = torch.nn.parallel.DistributedDataParallel(model, find_unused_parameters=False)
+
+    res_name = 'checkpoint_red.pth.tar'
+    if os.path.isfile(res_name) and not args.benchrun:
+        try:
+            dist.barrier()
+            # Map model to be loaded to specified single gpu.
+            loc = {'cuda:%d' % 0: 'cuda:%d' % lrank} if args.cuda else {'cpu:%d' % 0: 'cpu:%d' % lrank}
+            checkpoint = torch.load(program_dir + '/' + res_name, map_location=loc)
+            #start = checkpoint['start']
+            #start_epoch = checkpoint['epoch']
+            #best_acc = checkpoint['best_acc']
+            #loss_acc_list = checkpoint['loss_acc_list']
+            #rel_error_list = checkpoint['rel_error_list']
+            #initial_err_list = checkpoint['initial_err_list']
+            distrib_model.load_state_dict(checkpoint['state_dict'])
+            optimizer.load_state_dict(checkpoint['optimizer'])
+            if grank == 0:
+                print(f'WARNING: restarting from time={start} and {start_epoch} epoch')
+        except:
+            if grank == 0:
+                print(f'WARNING: restart file cannot be loaded, restarting!')
+     
+    path = './data/data_Taylor_Green_Vortex_reduced_'+str(t)+'.h5'
+
+    train_data, test_data, X_in, V_p_star, p_max, p_min = h5_loader(path)
+
+    X_in = torch.from_numpy(X_in).float().to(device)
+
+    V_p_pred_norm = distrib_model(X_in)
+    u_pred, v_pred, p_pred = denormalize_full(V_p_pred_norm[:,0:3], p_min, p_max)
+    result = [V_p_star,X_in,V_p_pred_norm, u_pred,v_pred, p_pred, loss_acc_list, rel_error_list, lr_list, initial_err_list]
+    if grank == 0:
+        print('Testing of model finished')                
+    f = open('./result/test_Taylor_green_vortex_reduced'+str(t)+'.pkl', 'wb')
+                pickle.dump(result, f)
+                f.close()
+
 
 if __name__ == "__main__":
     main()

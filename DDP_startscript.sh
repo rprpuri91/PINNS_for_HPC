@@ -2,16 +2,16 @@
 
 # general configuration of the job
 #SBATCH --job-name=TGV
-#SBATCH --account=zam
+#SBATCH --account=raise-ctp2
 #SBATCH --mail-user=
 #SBATCH --mail-type=ALL
 #SBATCH --output=job_tgv.out
 #SBATCH --error=job_tgv.err
-#SBATCH --time=02:00:00
+#SBATCH --time=06:00:00
 
 # configure node and process count on the CM
-#SBATCH --partition=dc-gpu-devel
-#SBATCH --nodes=1
+#SBATCH --partition=dc-gpu
+#SBATCH --nodes=2
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=32
 #SBATCH --gpus-per-node=4
@@ -26,7 +26,7 @@ bs=4       # batch-size
 epochs=15000    # epochs
 lr=0.001     # learning rate
 gamma=0.99 # gamma for decay
-restartInt=100
+restartInt=1000
 
 # AT
 #dataDir="/p/scratch/raise-ctp2/T31_LD/"
