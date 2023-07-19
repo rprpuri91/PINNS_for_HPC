@@ -779,7 +779,7 @@ def main():
                     print(f'DEBUG: benchmark of last epoch:\n')
                     what1 = 'cuda' if args.cuda else 'cpu'
                     print(prof.key_averages().table(sort_by='self_'+str(what1)+'_time_total'))
-i
+
             # if a better state is found
             is_best = loss_acc < best_acc
             if epoch % args.restart_int == 0 and not args.benchrun:
@@ -837,6 +837,11 @@ def test(t):
         # deterministic testrun
         if args.testrun:
             torch.cuda.manual_seed(args.nseed)
+
+    lwsize = torch.cuda.device_count() if args.cuda else 0 # local world size - per node
+    gwsize = dist.get_world_size() # global world size - per run
+    grank = dist.get_rank() # global rank - assign per run
+    lrank = dist.get_rank()%lwsize # local rank - assign per node
 
     layers = np.array([3, 300, 300, 300, 300, 300, 6])
     model = Taylor_green_vortex_PINN(layers).to(device)
