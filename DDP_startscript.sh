@@ -7,11 +7,11 @@
 #SBATCH --mail-type=ALL
 #SBATCH --output=job_tgv.out
 #SBATCH --error=job_tgv.err
-#SBATCH --time=06:00:00
+#SBATCH --time=02:00:00
 
 # configure node and process count on the CM
-#SBATCH --partition=dc-gpu
-#SBATCH --nodes=2
+#SBATCH --partition=dc-gpu-devel
+#SBATCH --nodes=4
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=32
 #SBATCH --gpus-per-node=4

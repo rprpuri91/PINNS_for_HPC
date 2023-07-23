@@ -662,8 +662,9 @@ def main():
             optimizer.load_state_dict(checkpoint['optimizer'])
             if grank == 0:
                 print(f'WARNING: restarting from time={start} and {start_epoch} epoch')
-        except:
+        except Exception as e:
             if grank == 0:
+                print(e)
                 print(f'WARNING: restart file cannot be loaded, restarting!')
 
 
@@ -751,7 +752,7 @@ def main():
             latest_lr = scheduler.get_last_lr()
 
             if grank == 0 and lrank == 0:
-                print(latest_lr)
+                print('Time: ',t[i+1])
                 print('Epoch finished')
                 print('Epoch: {:03d}, Loss: {:.5f}, Test MSE: {:.5f}, Test Error: {:.5f}, Initial_Error: {:.5f}'.
                     format(epoch, loss_acc, acc_test, rel_err, error_initial))
@@ -829,7 +830,66 @@ def main():
     # clean-up
     dist.destroy_process_group()
 
-def test(t):
+def test_model(t):
+    
+     # get parse arguments
+    pars_ini()
+
+    # check for CUDA
+    args.cuda = not args.no_cuda and torch.cuda.is_available()
+
+    # get directory
+    program_dir = os.getcwd()
+
+    torch.backends.cudnn.benchmark = True
+
+    # start time
+    st = time.time()
+
+    # initialize distributed backend
+    dist.init_process_group(backend=args.backend)
+
+    # deterministic testrun
+    if args.testrun:
+        torch.manual_seed(args.seed)
+        g = torch.Generator()
+        g.manual_seed(args.nseed)
+
+    #  get job rank
+    lwsize = torch.cuda.device_count() if args.cuda else 0 # local world size - per node
+    gwsize = dist.get_world_size() # global world size - per run
+    grank = dist.get_rank() # global rank - assign per run
+    lrank = dist.get_rank()%lwsize # local rank - assign per node
+
+    if grank == 0:
+        print('TIMER: initialise:', time.time() - st, 's')
+        #print('DEBUG: local ranks:', lwsize, '/ global ranks:', gwsize)
+        print('DEBUG: sys.version:', sys.version, '\n')
+
+        print('DEBUG: IO parsers:')
+        print('DEBUG: args.data_dir:', args.data_dir)
+        print('DEBUG: args.restart_int:', args.restart_int, '\n')
+
+        print('DEBUG: model parsers:')
+        print('DEBUG: args.batch_size:', args.batch_size)
+        print('DEBUG: args.epochs:', args.epochs)
+        print('DEBUG: args.lr:', args.lr)
+        print('DEBUG: args.wdecay:', args.wdecay)
+        print('DEBUG: args.gamma:', args.gamma)
+        print('DEBUG: args.shuff:', args.shuff, '\n')
+
+        print('DEBUG: debug parsers:')
+        print('DEBUG: args.testrun:', args.testrun)
+        print('DEBUG: args.nseed:', args.nseed)
+        print('DEBUG: args.log_int:', args.log_int, '\n')
+
+        print('DEBUG: parallel parsers:')
+        print('DEBUG: args.backend:', args.backend)
+        print('DEBUG: args.nworker:', args.nworker)
+        print('DEBUG: args.prefetch:', args.prefetch)
+        print('DEBUG: args.cuda:', args.cuda)
+        print('DEBUG: args.benchrun:', args.benchrun, '\n')
+    
 
     device = torch.device('cuda' if args.cuda and torch.cuda.is_available() else 'cpu',lrank)
     if args.cuda:
@@ -856,7 +916,14 @@ def test(t):
                                                                   find_unused_parameters=False)
     else:
         distrib_model = torch.nn.parallel.DistributedDataParallel(model, find_unused_parameters=False)
-
+    
+    loss_acc_list = []
+    rel_error_list = []
+    initial_err_list = []
+    lr_list = []
+    start = 0
+    start_epoch = 1
+    best_acc = np.inf
     res_name = 'checkpoint_red.pth.tar'
     if os.path.isfile(res_name) and not args.benchrun:
         try:
@@ -864,18 +931,19 @@ def test(t):
             # Map model to be loaded to specified single gpu.
             loc = {'cuda:%d' % 0: 'cuda:%d' % lrank} if args.cuda else {'cpu:%d' % 0: 'cpu:%d' % lrank}
             checkpoint = torch.load(program_dir + '/' + res_name, map_location=loc)
-            #start = checkpoint['start']
-            #start_epoch = checkpoint['epoch']
-            #best_acc = checkpoint['best_acc']
-            #loss_acc_list = checkpoint['loss_acc_list']
-            #rel_error_list = checkpoint['rel_error_list']
-            #initial_err_list = checkpoint['initial_err_list']
+            start = checkpoint['start']
+            start_epoch = checkpoint['epoch']
+            best_acc = checkpoint['best_acc']
+            loss_acc_list = checkpoint['loss_acc_list']
+            rel_error_list = checkpoint['rel_error_list']
+            initial_err_list = checkpoint['initial_err_list']
             distrib_model.load_state_dict(checkpoint['state_dict'])
-            optimizer.load_state_dict(checkpoint['optimizer'])
+            #optimizer.load_state_dict(checkpoint['optimizer'])
             if grank == 0:
                 print(f'WARNING: restarting from time={start} and {start_epoch} epoch')
-        except:
+        except Exception as e:
             if grank == 0:
+                print(e)
                 print(f'WARNING: restart file cannot be loaded, restarting!')
      
     path = './data/data_Taylor_Green_Vortex_reduced_'+str(t)+'.h5'
@@ -886,16 +954,17 @@ def test(t):
 
     V_p_pred_norm = distrib_model(X_in)
     u_pred, v_pred, p_pred = denormalize_full(V_p_pred_norm[:,0:3], p_min, p_max)
-    result = [V_p_star,X_in,V_p_pred_norm, u_pred,v_pred, p_pred, loss_acc_list, rel_error_list, lr_list, initial_err_list]
+    result = [V_p_star,X_in,V_p_pred_norm, u_pred,v_pred, p_pred]
     if grank == 0:
         print('Testing of model finished')                
     f = open('./result/test_Taylor_green_vortex_reduced'+str(t)+'.pkl', 'wb')
-                pickle.dump(result, f)
-                f.close()
+    pickle.dump(result, f)
+    f.close()
 
 
-if __name__ == "__main__":
+'''if __name__ == "__main__":
     main()
     sys.exit()
-
+'''
+test_model(17)
 #h5_loader()
