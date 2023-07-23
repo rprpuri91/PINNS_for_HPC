@@ -790,12 +790,36 @@ def main():
                 best_acc = min(loss_acc, best_acc)
                 V_p_pred_norm = distrib_model(X_in)
                 u_pred, v_pred, p_pred = denormalize_full(V_p_pred_norm[:,0:3], p_min, p_max)
-                result = [V_p_star,X_in,V_p_pred_norm, u_pred,v_pred, p_pred, loss_acc_list, rel_error_list, lr_list, initial_err_list]
-                if grank == 0:
+                 with torch.no_grad():
+                    V_p_star = V_p_star.cpu().detach().numpy()
+                    X_in = X_in.cpu().detach().numpy()
+                    V_p_pred_norm = V_p_pred_norm.cpu().detach().numpy()
+                    u_pred = u_pred.cpu().detach().numpy()
+                    v_pred = v_pred.cpu().detach().numpy()
+                    p_pred = p_pred.cpu().detach().numpy()
+                    loss = np.asarray(loss_acc_list)
+                    error = np.asarray(rel_error_list)
+                    lr = np.asarray(lr_list)
+                    initial_error = np.asarray(initial_err_list)
+                    #result = [V_p_star,X_in,V_p_pred_norm, u_pred,v_pred, p_pred, loss_acc_list, rel_error_list, lr_list, initial_err_list]
+                    if grank == 0:
+                        h5 = h5py.File('../data/data_Taylor_Green_Vortex_reduced_'+str(t)+'.h5', 'w')
+                        g1 = h5.create_group('result')
+                        g1.create_dataset('star', data=V_p_star)
+                        g1.create_dataset('X_in', data=X_in)
+                        g1.create_dataset('u_pred', data=u_pred)
+                        g1.cerate_dataset('v_pred', data=v_pred)
+                        g1.create_dataset('p_pred', data=p_pred)
+                        g1.create_dataset('loss', data=loss)
+                        g1.create_dataset('error', data=error)
+                        g1.create_dataset('lr', data=lr)
+                        g1.create_dataset('initial', data=initial_error)
+                        h5.close()
+                '''if grank == 0:
                     print('Saving results at epoch: ',epoch)
                 f = open('./result/result_Taylor_green_vortex_reduced'+str(t[i])+'_'+str(epoch)+'.pkl', 'wb')
                 pickle.dump(result, f)
-                f.close()
+                f.close()'''
 
             if grank==0:
                 print(epoch)
@@ -966,5 +990,5 @@ def test_model(t):
     main()
     sys.exit()
 '''
-test_model(17)
+test_model(10)
 #h5_loader()
