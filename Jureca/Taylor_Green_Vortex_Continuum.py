@@ -790,7 +790,7 @@ def main():
                 best_acc = min(loss_acc, best_acc)
                 V_p_pred_norm = distrib_model(X_in)
                 u_pred, v_pred, p_pred = denormalize_full(V_p_pred_norm[:,0:3], p_min, p_max)
-                 with torch.no_grad():
+                with torch.no_grad():
                     V_p_star = V_p_star.cpu().detach().numpy()
                     X_in = X_in.cpu().detach().numpy()
                     V_p_pred_norm = V_p_pred_norm.cpu().detach().numpy()
