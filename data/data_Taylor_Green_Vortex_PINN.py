@@ -237,7 +237,7 @@ class Preprocessing_Taylor_Green():
 
     def data_generation(self):
 
-        t=13
+        t=17
 
         X_in1, X_left, X_right, X_top, X_bottom = self.X_gen(t)
 
@@ -295,7 +295,7 @@ class Preprocessing_Taylor_Green():
 
         h5 = h5py.File('../data/data_Taylor_Green_Vortex_reduced_'+str(t)+'.h5', 'w')
         g1 = h5.create_group('domain')
-        g1.create_dataset('data1', data=domain_train)
+
         g1.create_dataset('data2', data=domain_test)
 
         g2 = h5.create_group('left')
