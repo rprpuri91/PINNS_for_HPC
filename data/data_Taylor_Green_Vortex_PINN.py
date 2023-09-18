@@ -1,5 +1,5 @@
 import matplotlib.pyplot as plt
-import matplotlib.patches as patch
+import matplotlib
 import matplotlib.animation as animation
 import numpy as np
 import torch
@@ -7,6 +7,18 @@ import h5py
 import re
 #from sklearn.preprocessing import MinMaxScaler
 import sys, os, time, random, shutil
+import tikzplotlib as tkz
+'''matplotlib.use("pgf")
+matplotlib.rcParams.update({
+    "pgf.texsystem": "pdflatex",
+    'font.family': 'Times New Roman',
+    'text.usetex': True,
+    'pgf.rcfonts': False,
+    "pgf.texsystem" : "xelatex"
+})'''
+
+plt.rcParams["font.family"]="Times New Roman"
+matplotlib.rcParams.update({'font.size': 14})
 
 
 torch.manual_seed(1234)
@@ -237,13 +249,17 @@ class Preprocessing_Taylor_Green():
 
     def data_generation(self):
 
-        t=17
+        t=19
 
         X_in1, X_left, X_right, X_top, X_bottom = self.X_gen(t)
 
         self.X_full = np.vstack([X_in1, X_left, X_right, X_top, X_bottom])
 
-        N2 = int(0.3 * len(X_in1))
+        percent = 0
+
+        N2 = int((percent/100) * len(X_in1))
+
+        print('N2', N2)
 
         idx = np.random.choice(X_in1.shape[0], N2, replace=False)
         X_domain = X_in1[idx, :]
@@ -282,7 +298,7 @@ class Preprocessing_Taylor_Green():
 
         #plt.quiver(domain_train[:, 0], domain_train[:, 1], u0, v0, U_grid, scale=30)
         #plt.colorbar()
-
+        print("data", domain_train.shape)
         #plt.show()
 
         self.V_p_star = np.vstack([self.u_star, self.v_star, self.p_star])
@@ -293,9 +309,9 @@ class Preprocessing_Taylor_Green():
         #u_full, v_full, p_full = self.normalize(u_full, v_full, p_full)
         V_p_full = np.vstack([u_full, v_full, p_full])
 
-        h5 = h5py.File('../data/data_Taylor_Green_Vortex_reduced_'+str(t)+'.h5', 'w')
+        h5 = h5py.File('../data/data_Taylor_Green_Vortex_reduced'+str(percent)+'_'+str(t)+'.h5', 'w')
         g1 = h5.create_group('domain')
-
+        g1.create_dataset('data1', data=domain_train)
         g1.create_dataset('data2', data=domain_test)
 
         g2 = h5.create_group('left')
@@ -354,6 +370,10 @@ def plotting(X, u, v, p):
     u0 = u
     v0 = v
     p0 = p
+    X_l1 = X[::5]
+    u1 = u[::5]
+    v1 = v[::5]
+
     p_min = p.min()
     p_max = p.max()
     u_max = u.max()
@@ -364,9 +384,9 @@ def plotting(X, u, v, p):
 
     print(u0.shape)
 
-    U_grid = np.sqrt(np.square(u0) + np.square(v0))
+    U_grid = np.sqrt(np.square(u1) + np.square(v1))
 
-    x_grid = np.reshape(X_l[:,0], (82,50))
+    """x_grid = np.reshape(X_l[:,0], (82,50))
     y_grid = np.reshape(X_l[:,1], (82,50))
 
     u_grid = np.reshape(u0, (82,50))
@@ -382,11 +402,22 @@ def plotting(X, u, v, p):
     p_grid_max = p_grid.max()
     p_grid_min = p_grid.min()
 
-    print(p_grid_max)
-
-    plt.tricontourf(X_l[:,0],X_l[:,1],p0, levels=7, cmap='rainbow')
-    plt.quiver(X_l[:, 0], X_l[:, 1], u0, v0, U_grid, scale=30)
-    plt.colorbar()
+    print(p_grid_max)"""
+    fig,ax = plt.subplots(1,1)
+    a = ax.tricontourf(X_l[:,0],X_l[:,1],p0, levels=8, cmap='winter')
+    b = ax.quiver(X_l1[:, 0], X_l1[:, 1], u1, v1, U_grid, scale=30, cmap='magma')
+    cbar1 = plt.colorbar(a)
+    cbar2 = plt.colorbar(b)
+    """cbar1.set_ticklabels([])
+    cbar2.set_ticklabels([])
+    ax.set_xticklabels([])
+    ax.set_yticklabels([])"""
+    #ax.axes.xaxis.set_visible(False)
+    #ax.axes.yaxis.set_visible(False)
+    cbar1.set_label(r'$p$', rotation=0)
+    cbar2.set_label(r'$U_{mag}$', rotation=0)
+    plt.savefig('TGV.pdf', dpi=400)
+    #tkz.save("TGV0.tex")
     plt.show()
 
     fig, ax = plt.subplots(1, 3)
