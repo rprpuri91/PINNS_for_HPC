@@ -148,8 +148,8 @@ def h5_loader(path):
         V_p_in = np.array(full.get('data2'))
         p_max = np.array(full.get('data3'))
         p_min = np.array(full.get('data4'))
-        X_domain = npp.array(full.get('data5'))
-        # print(V_p_star)
+        X_domain = np.array(full.get('data5'))
+        #print(X_domain.shape)
 
         p_max = torch.from_numpy(p_max).float()
         p_min = torch.from_numpy(p_min).float()
@@ -166,10 +166,10 @@ def h5_loader(path):
         print(V_p_train_bottom.shape)'''
 
         train_data = np.vstack([train_domain, train_left, train_right, train_top, train_bottom])
-        train_physical = np.vstack([X_domain, train_left[:,0:3], train_right[:,0:3], train_top[:,0:3], train_bottom[:,0:3])
+        train_physical = np.vstack([X_domain, train_left[:,0:3], train_right[:,0:3], train_top[:,0:3], train_bottom[:,0:3]])
         test_data = np.vstack([test_domain, test_left, test_right, test_top, test_bottom])
 
-        #print('train', train_data.shape)
+        print('train', train_physical.shape)
         #print('test', test_data.shape)
         '''print('########################################')
         for i in range(len(train_data)):
@@ -182,7 +182,7 @@ def h5_loader(path):
     except Exception as e:
         print(e)
 
-    return train_data,train_physical, test_data, X_in, V_p_in, p_max, p_min
+    return train_data,train_data, test_data, X_in, V_p_in, p_max, p_min
 
 def denormalize(p_norm, p_max, p_min):
     p = (((p_norm + 1) * (p_max - p_min)) / 2) + p_min
