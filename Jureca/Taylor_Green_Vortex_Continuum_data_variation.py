@@ -182,7 +182,7 @@ def h5_loader(path):
     except Exception as e:
         print(e)
 
-    return train_data,test_data, X_in, V_p_in, p_max, p_min
+    return train_data,train_physical, test_data, X_in, V_p_in, p_max, p_min
 
 def denormalize(p_norm, p_max, p_min):
     p = (((p_norm + 1) * (p_max - p_min)) / 2) + p_min
@@ -192,15 +192,15 @@ def denormalize(p_norm, p_max, p_min):
 class GenerateDataset(Dataset):
 
     def __init__(self, list_id, path, trained_step):
-        self.train_data,_ , _, _,_ ,_= h5_loader(path)
+        self.train_data,_,_ , _, _,_ ,_= h5_loader(path)
         
         for t in trained_step:
             path1 = './data/data_Taylor_Green_Vortex_reduced_'+str(t)+'.h5'
             if t==0:
-                self.train_data_i0,_,_,_,_,_ = h5_loader(path1)
+                self.train_data_i0,_,_,_,_,_,_ = h5_loader(path1)
             else:
                 print('else')
-                self.train_data_i,_,_,_,_,_ = h5_loader(path1)
+                self.train_data_i,_,_,_,_,_,_ = h5_loader(path1)
                 self.train_data_i0 = np.hstack([self.train_data_i0,self.train_data_i])
         #print('train', self.train_data_i0.shape)         
         self.len = len(self.train_data)
@@ -214,6 +214,19 @@ class GenerateDataset(Dataset):
 
     def __len__(self):
         return self.len    
+
+class PhysicalDataset(Dataset):
+    def __init__(self, list_id, path):
+        _,self.train_physical,_,_,_,_,_ = h5_loader(path)
+        self.len = len(self.train_physical)
+
+    def __getitem__(self, index):
+        data0 = self.train_physical[index]
+        data = torch.from_numpy(data0).float()
+        return data
+    
+    def __len__(self):
+        return self.len
 
 class TestDataset(Dataset):
 
@@ -239,7 +252,7 @@ class TestDataset(Dataset):
     def __len__(self):
         return self.len
 
-def train(model, device , train_loader, optimizer, epoch,grank, gwsize, rho, mu, p_max, p_min, trained_step):
+def train(model, device , train_loader,physical_loader, optimizer, epoch,grank, gwsize, rho, mu, p_max, p_min, trained_step):
     model.train()
     t_list = []
     loss_acc = 0
@@ -253,8 +266,8 @@ def train(model, device , train_loader, optimizer, epoch,grank, gwsize, rho, mu,
         optimizer.zero_grad()
         # predictions = distrib_model(inputs)
         #with torch.cuda.amp.autocast():
-        
-        loss = total_loss(model, data,data1, device, rho, mu, p_max, p_min, grank, trained_step)
+        physical_data = physical_loader[batch_idx]
+        loss = total_loss(model, data,physical_data,data1, device, rho, mu, p_max, p_min, grank, trained_step)
         
         loss.backward()
         
@@ -413,7 +426,7 @@ def par_allgather_obj(obj,gwsize):
     dist.all_gather_object(res,obj,group=None)
     return res
 
-def total_loss(model, data, data1, device, rho, mu, p_min, p_max, grank, trained_step):
+def total_loss(model, data,physical_data, data1, device, rho, mu, p_min, p_max, grank, trained_step):
 
     loss_function = nn.MSELoss()
     #print(data)
@@ -426,20 +439,25 @@ def total_loss(model, data, data1, device, rho, mu, p_min, p_max, grank, trained
         loss_initial += loss_function(output_i[:,0:3], exact_i)
 
     inputs = data[:,0:3].to(device)
-    
-    flag = data[:6]
+    phy_input = physical_data.to(device)
+    #flag = data[:6]
     #print('input', inputs)
     
     exact = data[:,3:6].to(device)
 
     #print('exact', exact)
+    g1 = inputs.clone()
+    g1.requires_grad = True
     
-    g = inputs.clone()
+    output_data = model(g1)
+
+
+    g = phy_input.clone()
     g.requires_grad = True
    
     #global output
     output = model(g)
-    output_i = model(inputs_i)
+    #output_i = model(inputs_i)
          
     u = output[:,0]
     v = output[:,1]
@@ -552,7 +570,7 @@ def total_loss(model, data, data1, device, rho, mu, p_min, p_max, grank, trained
     loss_fs22 = loss_function(f_s22, target5)
     loss_fs12 = loss_function(f_s12, target6)
 
-    loss_variable = torch.zeros((1,), requires_grad=True, device=device)
+    '''loss_variable = torch.zeros((1,), requires_grad=True, device=device)
     for i in range(0,data.shape[0]):
         if data[i,6] == 0:
             loss_variable = loss_variable.clone().to(device)
@@ -560,6 +578,8 @@ def total_loss(model, data, data1, device, rho, mu, p_min, p_max, grank, trained
         
     if grank==0:
         print("loss_var",loss_variable)
+    '''
+    loss_variable = loss_function(output_data[:,0:3], exact)
     #print("\tloss_continuity :", loss_continuity, "loss_momentum1 :", loss_ns1, "loss_momentum2 :", loss_ns2, "loss_variable: ", loss_variable)
 
     loss =  loss_continuity + loss_fu + loss_fv + loss_fs11 + loss_fs22 + loss_fs12 + loss_variable + loss_initial 
@@ -722,17 +742,23 @@ def main():
 
         path = './data/data_Taylor_Green_Vortex_reduced10_'+str(t[i+1])+'.h5'
 
-        train_data, test_data, X_in, V_p_star, p_max, p_min = h5_loader(path)
+        train_data,physical_data, test_data, X_in, V_p_star, p_max, p_min = h5_loader(path)
 
         X_in = torch.from_numpy(X_in).float().to(device)
 
         train_len = len(train_data)
+        physical_len = len(physical_data)
         test_len = len(test_data)
+
+        data_size = int(train_len/args.batch_size)
+        batch_size_physical = int(physical_len/data_size)
 
         # restricts data loading to a subset of the dataset exclusive to the current process
         args.shuff = args.shuff and not args.testrun
         train_sampler = torch.utils.data.distributed.DistributedSampler(dataset = GenerateDataset([x for x in range(train_len)], path,trained_step),
                                 num_replicas=gwsize, rank=grank, shuffle=True)
+        physical_sampler = torch.utils.data.distributed.DistributedSampler(dataset = GenerateDataset([x for x in range(physical_len)], path),
+                                num_replicas=gwsize, rank=grank, shuffle=True)        
         test_sampler = torch.utils.data.distributed.DistributedSampler(dataset = TestDataset([x for x in range(test_len)], path, trained_step),
                                 num_replicas=gwsize, rank=grank, shuffle=True)
 
@@ -744,6 +770,12 @@ def main():
         kwargs = {'worker_init_fn': seed_worker, 'generator': g} if args.testrun else {}
 
         train_loader = torch.utils.data.DataLoader(dataset = GenerateDataset([x for x in range(train_len)], path, trained_step), batch_size=args.batch_size,
+                                                   sampler = train_sampler,
+                                                   num_workers=args.nworker, pin_memory=False,
+                                                   persistent_workers=pers_w, drop_last=True,
+                                                   prefetch_factor=args.prefetch, **kwargs)
+        physical_loader = torch.utils.data.DataLoader(dataset = GenerateDataset([x for x in range(physical_len)], path, trained_step), 
+                                                   batch_size=args.batch_size,
                                                    sampler = train_sampler,
                                                    num_workers=args.nworker, pin_memory=False,
                                                    persistent_workers=pers_w, drop_last=True,
@@ -771,9 +803,9 @@ def main():
             #training
             if args.benchrun and epoch==args.epochs:
                 with torch.autograd.profiler.profile(use_cuda=args.cuda, profile_memory=True) as prof:
-                    loss_acc = train(distrib_model, device, train_loader, optimizer,epoch, grank, gwsize, rho, mu, p_max,p_min, trained_step)
+                    loss_acc = train(distrib_model, device, train_loader,physical_loader, optimizer,epoch, grank, gwsize, rho, mu, p_max,p_min, trained_step)
             else:
-                loss_acc = train(distrib_model, device, train_loader, optimizer, epoch, grank, gwsize, rho, mu, p_max, p_min, trained_step)
+                loss_acc = train(distrib_model, device, train_loader,physical_loader, optimizer, epoch, grank, gwsize, rho, mu, p_max, p_min, trained_step)
 
             loss_acc_list.append(loss_acc)
 
