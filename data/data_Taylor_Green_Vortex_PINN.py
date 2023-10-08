@@ -7,7 +7,7 @@ import h5py
 import re
 #from sklearn.preprocessing import MinMaxScaler
 import sys, os, time, random, shutil
-import tikzplotlib as tkz
+#import tikzplotlib as tkz
 '''matplotlib.use("pgf")
 matplotlib.rcParams.update({
     "pgf.texsystem": "pdflatex",
@@ -259,7 +259,7 @@ class Preprocessing_Taylor_Green():
 
         percent = 50
 
-        per_domain = 10
+        per_domain = 0
 
         N2 = int((percent/100) * len(X_in1))
 
@@ -339,7 +339,7 @@ class Preprocessing_Taylor_Green():
         #u_full, v_full, p_full = self.normalize(u_full, v_full, p_full)
         V_p_full = np.vstack([u_full, v_full, p_full])
 
-        h5 = h5py.File('../data/data_Taylor_Green_Vortex_reduced'+str(per_domain)+'_'+str(t)+'.h5', 'w')
+        h5 = h5py.File('./data/data_Taylor_Green_Vortex_reduced'+str(per_domain)+'_'+str(t)+'.h5', 'w')
         g1 = h5.create_group('domain')
         g1.create_dataset('data1', data=domain_train)
         g1.create_dataset('data2', data=domain_test)
