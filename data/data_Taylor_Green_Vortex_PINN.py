@@ -249,13 +249,17 @@ class Preprocessing_Taylor_Green():
 
     def data_generation(self):
 
-        t=19
+        t=20
 
         X_in1, X_left, X_right, X_top, X_bottom = self.X_gen(t)
 
+        print("size", X_in1.shape)
+
         self.X_full = np.vstack([X_in1, X_left, X_right, X_top, X_bottom])
 
-        percent = 0
+        percent = 50
+
+        per_domain = 10
 
         N2 = int((percent/100) * len(X_in1))
 
@@ -264,8 +268,23 @@ class Preprocessing_Taylor_Green():
         idx = np.random.choice(X_in1.shape[0], N2, replace=False)
         X_domain = X_in1[idx, :]
 
+        N3 = int((per_domain / 100) * len(X_domain))
 
-        V_p_train_domain, X_train_domain, V_p_test_domain, X_test_domain = self.train_test(X_domain, "domain")
+        print('N3', N3)
+
+        idx1 = np.random.choice(X_domain.shape[0], N3, replace=False)
+
+        X_domain_data = X_domain[idx1,:]
+
+        plt.scatter(self.X_left[:,0], self.X_left[:,1], color='blue')
+        plt.scatter(self.X_right[:, 0], self.X_right[:, 1], color='blue')
+        plt.scatter(self.X_top[:, 0], self.X_top[:, 1], color='blue')
+        plt.scatter(self.X_bottom[:, 0], self.X_bottom[:, 1], color='blue')
+        plt.scatter(X_domain[:,0], X_domain[:,1], color='red')
+        plt.scatter(X_domain_data[:,0], X_domain_data[:,1], color='orange')
+        plt.show()
+
+        V_p_train_domain, X_train_domain, V_p_test_domain, X_test_domain = self.train_test(X_domain_data, "domain")
         V_p_train_left, X_train_left, V_p_test_left, X_test_left = self.train_test(X_left, "left")
         V_p_train_right, X_train_right, V_p_test_right, X_test_right = self.train_test(X_right, "right")
         V_p_train_top, X_train_top, V_p_test_top, X_test_top = self.train_test(X_top, "top")
@@ -276,14 +295,24 @@ class Preprocessing_Taylor_Green():
         domain_train = np.hstack([X_train_domain,V_p_train_domain])
         domain_test = np.hstack([X_test_domain, V_p_test_domain])
 
+        #print(domain_train)
+
+        #left_zeros = np.zeros((X_train_left.shape[0],1))
+
         left_train = np.hstack([X_train_left, V_p_train_left])
         left_test = np.hstack([X_test_left, V_p_test_left])
+
+        #right_zeros = np.zeros((X_train_right.shape[0],1))
 
         right_train = np.hstack([X_train_right, V_p_train_right])
         right_test = np.hstack([X_test_right, V_p_test_right])
 
+        #top_zeros = np.zeros((X_train_top.shape[0],1))
+
         top_train = np.hstack([X_train_top, V_p_train_top])
         top_test = np.hstack([X_test_top, V_p_test_top])
+
+        #bottom_zeros = np.zeros((X_train_bottom.shape[0],1))
 
         bottom_train = np.hstack([X_train_bottom, V_p_train_bottom])
         bottom_test = np.hstack([X_test_bottom, V_p_test_bottom])
@@ -294,11 +323,12 @@ class Preprocessing_Taylor_Green():
         u0 = domain_train[:,3]
         v0 = domain_train[:,4]
 
+        X_physical = np.vstack([X_domain,X_train_left, X_train_right, X_train_top, X_train_bottom])
         U_grid = np.sqrt(np.square(u0) + np.square(v0))
 
         #plt.quiver(domain_train[:, 0], domain_train[:, 1], u0, v0, U_grid, scale=30)
         #plt.colorbar()
-        print("data", domain_train.shape)
+        print("data", X_physical.shape)
         #plt.show()
 
         self.V_p_star = np.vstack([self.u_star, self.v_star, self.p_star])
@@ -309,7 +339,7 @@ class Preprocessing_Taylor_Green():
         #u_full, v_full, p_full = self.normalize(u_full, v_full, p_full)
         V_p_full = np.vstack([u_full, v_full, p_full])
 
-        h5 = h5py.File('../data/data_Taylor_Green_Vortex_reduced'+str(percent)+'_'+str(t)+'.h5', 'w')
+        h5 = h5py.File('../data/data_Taylor_Green_Vortex_reduced'+str(per_domain)+'_'+str(t)+'.h5', 'w')
         g1 = h5.create_group('domain')
         g1.create_dataset('data1', data=domain_train)
         g1.create_dataset('data2', data=domain_test)
@@ -335,6 +365,7 @@ class Preprocessing_Taylor_Green():
         g8.create_dataset('data2', data=V_p_full)
         g8.create_dataset('data3', data=self.p_max)
         g8.create_dataset('data4', data=self.p_min)
+        g8.create_dataset('data5', data=X_physical)
 
         h5.close()
 
