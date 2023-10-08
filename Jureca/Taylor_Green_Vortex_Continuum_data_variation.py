@@ -1,4 +1,4 @@
-
+import time
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -148,9 +148,12 @@ def h5_loader(path):
         V_p_in = np.array(full.get('data2'))
         p_max = np.array(full.get('data3'))
         p_min = np.array(full.get('data4'))
-        X_domain = np.array(full.get('data5'))
+        X_data = np.array(full.get('data5'))
         #print(X_domain.shape)
-
+        #print(train_left[:,0:3].shape)
+        #print(train_top[:,0:3].shape)
+        #print(train_right[:,0:3].shape)
+        #print(train_bottom[:,0:3].shape)
         p_max = torch.from_numpy(p_max).float()
         p_min = torch.from_numpy(p_min).float()
 
@@ -166,10 +169,10 @@ def h5_loader(path):
         print(V_p_train_bottom.shape)'''
 
         train_data = np.vstack([train_domain, train_left, train_right, train_top, train_bottom])
-        train_physical = np.vstack([X_domain, train_left[:,0:3], train_right[:,0:3], train_top[:,0:3], train_bottom[:,0:3]])
+        #train_physical = np.vstack([X_data, train_left[:,0:3], train_right[:,0:3], train_top[:,0:3], train_bottom[:,0:3]])
         test_data = np.vstack([test_domain, test_left, test_right, test_top, test_bottom])
 
-        print('train', train_physical.shape)
+        #print('train', train_physical.shape)
         #print('test', test_data.shape)
         '''print('########################################')
         for i in range(len(train_data)):
@@ -182,7 +185,7 @@ def h5_loader(path):
     except Exception as e:
         print(e)
 
-    return train_data,train_data, test_data, X_in, V_p_in, p_max, p_min
+    return train_data,X_data, test_data, X_in, V_p_in, p_max, p_min
 
 def denormalize(p_norm, p_max, p_min):
     p = (((p_norm + 1) * (p_max - p_min)) / 2) + p_min
@@ -199,7 +202,7 @@ class GenerateDataset(Dataset):
             if t==0:
                 self.train_data_i0,_,_,_,_,_,_ = h5_loader(path1)
             else:
-                print('else')
+                #print('else')
                 self.train_data_i,_,_,_,_,_,_ = h5_loader(path1)
                 self.train_data_i0 = np.hstack([self.train_data_i0,self.train_data_i])
         #print('train', self.train_data_i0.shape)         
@@ -231,13 +234,13 @@ class PhysicalDataset(Dataset):
 class TestDataset(Dataset):
 
     def __init__(self, list_id, path, trained_step):
-        _, self.test_data, _, _, _ ,_= h5_loader(path)
+        _,_, self.test_data, _, _, _ ,_= h5_loader(path)
         for t in trained_step:
             path1 = './data/data_Taylor_Green_Vortex_reduced_'+str(t)+'.h5'
             if t==0:
-                _, self.test_data_i0, _,_,_,_ = h5_loader(path1)
+                _,_, self.test_data_i0, _,_,_,_ = h5_loader(path1)
             else:
-                _, self.test_data_i, _,_,_,_ = h5_loader(path1)
+                _,_, self.test_data_i, _,_,_,_ = h5_loader(path1)
                 self.test_data_i0 = np.hstack([self.test_data_i0,self.test_data_i])
         #print('test', self.test_data_i0.shape)
         self.len = len(self.test_data)
@@ -259,6 +262,7 @@ def train(model, device , train_loader,physical_loader, optimizer, epoch,grank, 
     if grank==0:
         print("\n")
     count = 0
+    phy_data = iter(physical_loader)
     for batch_idx, (data, data1) in enumerate(train_loader):
         t = time.perf_counter()
         #if count % 1000 == 0 and grank==0:
@@ -266,7 +270,7 @@ def train(model, device , train_loader,physical_loader, optimizer, epoch,grank, 
         optimizer.zero_grad()
         # predictions = distrib_model(inputs)
         #with torch.cuda.amp.autocast():
-        physical_data = physical_loader[batch_idx]
+        physical_data = next(phy_data)
         loss = total_loss(model, data,physical_data,data1, device, rho, mu, p_max, p_min, grank, trained_step)
         
         loss.backward()
@@ -440,6 +444,9 @@ def total_loss(model, data,physical_data, data1, device, rho, mu, p_min, p_max, 
 
     inputs = data[:,0:3].to(device)
     phy_input = physical_data.to(device)
+    if grank==0:
+        print("phy_input", phy_input)
+        print("inputs", inputs)
     #flag = data[:6]
     #print('input', inputs)
     
@@ -582,7 +589,7 @@ def total_loss(model, data,physical_data, data1, device, rho, mu, p_min, p_max, 
     loss_variable = loss_function(output_data[:,0:3], exact)
     #print("\tloss_continuity :", loss_continuity, "loss_momentum1 :", loss_ns1, "loss_momentum2 :", loss_ns2, "loss_variable: ", loss_variable)
 
-    loss =  loss_continuity + loss_fu + loss_fv + loss_fs11 + loss_fs22 + loss_fs12 + loss_variable + loss_initial 
+    loss =  loss_continuity + loss_fu + loss_fv + loss_fs11 + loss_fs22 + loss_fs12 + loss_initial + loss_variable
 
     #loss = loss_initial
 
@@ -740,7 +747,7 @@ def main():
         if grank==0:
             print('Starting training for t=',t[i+1])
 
-        path = './data/data_Taylor_Green_Vortex_reduced10_'+str(t[i+1])+'.h5'
+        path = './data/data_Taylor_Green_Vortex_reduced0_'+str(t[i+1])+'.h5'
 
         train_data,physical_data, test_data, X_in, V_p_star, p_max, p_min = h5_loader(path)
 
@@ -757,7 +764,7 @@ def main():
         args.shuff = args.shuff and not args.testrun
         train_sampler = torch.utils.data.distributed.DistributedSampler(dataset = GenerateDataset([x for x in range(train_len)], path,trained_step),
                                 num_replicas=gwsize, rank=grank, shuffle=True)
-        physical_sampler = torch.utils.data.distributed.DistributedSampler(dataset = GenerateDataset([x for x in range(physical_len)], path),
+        physical_sampler = torch.utils.data.distributed.DistributedSampler(dataset = PhysicalDataset([x for x in range(physical_len)], path),
                                 num_replicas=gwsize, rank=grank, shuffle=True)        
         test_sampler = torch.utils.data.distributed.DistributedSampler(dataset = TestDataset([x for x in range(test_len)], path, trained_step),
                                 num_replicas=gwsize, rank=grank, shuffle=True)
@@ -774,7 +781,7 @@ def main():
                                                    num_workers=args.nworker, pin_memory=False,
                                                    persistent_workers=pers_w, drop_last=True,
                                                    prefetch_factor=args.prefetch, **kwargs)
-        physical_loader = torch.utils.data.DataLoader(dataset = GenerateDataset([x for x in range(physical_len)], path, trained_step), 
+        physical_loader = torch.utils.data.DataLoader(dataset = PhysicalDataset([x for x in range(physical_len)], path), 
                                                    batch_size=args.batch_size,
                                                    sampler = train_sampler,
                                                    num_workers=args.nworker, pin_memory=False,
@@ -870,7 +877,7 @@ def main():
                     initial_error = np.asarray(initial_err_list)
                     #result = [V_p_star,X_in,V_p_pred_norm, u_pred,v_pred, p_pred, loss_acc_list, rel_error_list, lr_list, initial_err_list]
                     if grank == 0:
-                        h5 = h5py.File('./result/result_Taylor_Green_Vortex_reduced10'+str(t[i+1])+'_'+str(epoch)+'.h5', 'w')
+                        h5 = h5py.File('./result/result_Taylor_Green_Vortex_reduced0'+str(t[i+1])+'_'+str(epoch)+'.h5', 'w')
                         g1 = h5.create_group('result')
                         g1.create_dataset('star', data=V_p_star)
                         g1.create_dataset('X_in', data=g)
@@ -1015,7 +1022,7 @@ def test_model(t):
     start = 0
     start_epoch = 1
     best_acc = np.inf
-    res_name = 'checkpoint_red.pth.tar'
+    res_name = 'checkpoint_red0.pth.tar'
     if os.path.isfile(res_name) and not args.benchrun:
         try:
             dist.barrier()
@@ -1040,7 +1047,7 @@ def test_model(t):
      
     path = './data/data_Taylor_Green_Vortex_reduced0_'+str(t)+'.h5'
 
-    train_data, test_data, X_in, V_p_star, p_max, p_min = h5_loader(path)
+    train_data,physical_data, test_data, X_in, V_p_star, p_max, p_min = h5_loader(path)
 
     g = torch.from_numpy(X_in).float().to(device)
 
@@ -1070,9 +1077,10 @@ def test_model(t):
     
     
 
-if __name__ == "__main__":
+'''if __name__ == "__main__":
     main()
     sys.exit()
-
-#test_model(15)
+'''
+test_model(10)
+    
 #h5_loader()

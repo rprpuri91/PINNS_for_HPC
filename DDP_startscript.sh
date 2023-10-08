@@ -2,7 +2,7 @@
 
 # general configuration of the job
 #SBATCH --job-name=TGV
-#SBATCH --account=raise-ctp2
+#SBATCH --account=zam #raise-ctp2
 #SBATCH --mail-user=
 #SBATCH --mail-type=ALL
 #SBATCH --output=job_tgv.out
@@ -11,10 +11,10 @@
 
 # configure node and process count on the CM
 #SBATCH --partition=dc-gpu-devel
-#SBATCH --nodes=4
+#SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=32
-#SBATCH --gpus-per-node=4
+#SBATCH --gpus-per-node=1
 #SBATCH --exclusive
 
 # gres options have to be disabled for deepv
@@ -31,7 +31,7 @@ restartInt=1000
 # AT
 #dataDir="/p/scratch/raise-ctp2/T31_LD/"
 #COMMAND="./Jureca/Taylor_Green_Vortex_PINN_noCentre.py"
-COMMAND="./Jureca/Taylor_Green_Vortex_Continuum_final.py"
+COMMAND="./Jureca/Taylor_Green_Vortex_Continuum_data_variation.py"
 #COMMAND="./data/data_Taylor_Green_Vortex_PINN.py"
 EXEC="$COMMAND \
   --batch-size $bs \
