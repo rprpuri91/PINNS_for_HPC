@@ -249,7 +249,7 @@ class Preprocessing_Taylor_Green():
 
     def data_generation(self):
 
-        t=0
+        t=30
 
         X_in1, X_left, X_right, X_top, X_bottom = self.X_gen(t)
 
@@ -261,7 +261,7 @@ class Preprocessing_Taylor_Green():
 
         percent = 50
 
-        per1 = 0
+        per1 = 10
         
         if t==0:
             per_domain = 100
