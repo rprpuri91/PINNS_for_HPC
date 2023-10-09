@@ -31,8 +31,8 @@ class Preprocessing_Taylor_Green():
         self.nu = nu
         self.n = n
 
-        x_values = np.arange(-np.pi, np.pi, 0.1).tolist()
-        y_values = np.arange(-np.pi, np.pi, 0.1).tolist()
+        x_values = np.arange(-np.pi, np.pi, 0.05).tolist()
+        y_values = np.arange(-np.pi, np.pi, 0.05).tolist()
         t = np.arange(0, 100, 1)
         x_values.append(np.pi)
         y_values.append(np.pi)
@@ -249,17 +249,24 @@ class Preprocessing_Taylor_Green():
 
     def data_generation(self):
 
-        t=20
+        t=0
 
         X_in1, X_left, X_right, X_top, X_bottom = self.X_gen(t)
 
-        print("size", X_in1.shape)
+        print("Domain size", X_in1.shape)
 
         self.X_full = np.vstack([X_in1, X_left, X_right, X_top, X_bottom])
+        
+        print('Full data points: ',self.X_full.shape)
 
         percent = 50
 
-        per_domain = 0
+        per1 = 0
+        
+        if t==0:
+            per_domain = 100
+        else:
+            per_domain = per1
 
         N2 = int((percent/100) * len(X_in1))
 
@@ -339,7 +346,7 @@ class Preprocessing_Taylor_Green():
         #u_full, v_full, p_full = self.normalize(u_full, v_full, p_full)
         V_p_full = np.vstack([u_full, v_full, p_full])
 
-        h5 = h5py.File('./data/data_Taylor_Green_Vortex_reduced'+str(per_domain)+'_'+str(t)+'.h5', 'w')
+        h5 = h5py.File('./data/data_Taylor_Green_Vortex_reduced'+str(per1)+'_'+str(t)+'.h5', 'w')
         g1 = h5.create_group('domain')
         g1.create_dataset('data1', data=domain_train)
         g1.create_dataset('data2', data=domain_test)
