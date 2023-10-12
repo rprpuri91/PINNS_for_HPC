@@ -247,9 +247,9 @@ class Preprocessing_Taylor_Green():
 
         return X_domain, X_left, X_right, X_top, X_bottom
 
-    def data_generation(self):
+    def data_generation(self,t):
 
-        t=30
+        #t=30
 
         X_in1, X_left, X_right, X_top, X_bottom = self.X_gen(t)
 
@@ -261,7 +261,7 @@ class Preprocessing_Taylor_Green():
 
         percent = 50
 
-        per1 = 20
+        per1 = 10
         
         if t==0:
             per_domain = 100
@@ -283,13 +283,13 @@ class Preprocessing_Taylor_Green():
 
         X_domain_data = X_domain[idx1,:]
 
-        plt.scatter(self.X_left[:,0], self.X_left[:,1], color='blue')
-        plt.scatter(self.X_right[:, 0], self.X_right[:, 1], color='blue')
-        plt.scatter(self.X_top[:, 0], self.X_top[:, 1], color='blue')
-        plt.scatter(self.X_bottom[:, 0], self.X_bottom[:, 1], color='blue')
-        plt.scatter(X_domain[:,0], X_domain[:,1], color='red')
-        plt.scatter(X_domain_data[:,0], X_domain_data[:,1], color='orange')
-        plt.show()
+        # plt.scatter(self.X_left[:,0], self.X_left[:,1], color='blue')
+        # plt.scatter(self.X_right[:, 0], self.X_right[:, 1], color='blue')
+        # plt.scatter(self.X_top[:, 0], self.X_top[:, 1], color='blue')
+        # plt.scatter(self.X_bottom[:, 0], self.X_bottom[:, 1], color='blue')
+        # plt.scatter(X_domain[:,0], X_domain[:,1], color='red')
+        # plt.scatter(X_domain_data[:,0], X_domain_data[:,1], color='orange')
+        # plt.show()
 
         V_p_train_domain, X_train_domain, V_p_test_domain, X_test_domain = self.train_test(X_domain_data, "domain")
         V_p_train_left, X_train_left, V_p_test_left, X_test_left = self.train_test(X_left, "left")
@@ -384,12 +384,15 @@ def main():
     #create_data_list_csv()
     preprocessing = Preprocessing_Taylor_Green(rho, nu, n)
     #preprocessing.X_gen(1)
-    preprocessing.data_generation()
-    X_initial = preprocessing.X_full
-    print('X', X_initial)
-    u_initial, v_initial =preprocessing.velocity(X_initial)
-    p_initial = preprocessing.pressure(X_initial)
-    plotting(X_initial, u_initial, v_initial, p_initial)
+    for t in range(0,30):
+        
+        preprocessing.data_generation(t)
+        
+    # X_initial = preprocessing.X_full
+    # print('X', X_initial)
+    # u_initial, v_initial =preprocessing.velocity(X_initial)
+    # p_initial = preprocessing.pressure(X_initial)
+    # plotting(X_initial, u_initial, v_initial, p_initial)
 
 def create_data_list_csv():
     directory = os.fsencode("../data/S2S/")
