@@ -263,8 +263,8 @@ class Preprocessing_Taylor_Green():
 
         per1 = 10
         
-        if t==0:
-            per_domain = 100
+        if t==0 and per1==0:
+            per_domain = 10
         else:
             per_domain = per1
 
@@ -384,9 +384,9 @@ def main():
     #create_data_list_csv()
     preprocessing = Preprocessing_Taylor_Green(rho, nu, n)
     #preprocessing.X_gen(1)
-    for t in range(0,30):
+    #for t in range(0,30):
         
-        preprocessing.data_generation(t)
+    preprocessing.data_generation(0)
         
     # X_initial = preprocessing.X_full
     # print('X', X_initial)
