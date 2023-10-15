@@ -14,7 +14,7 @@ from torch.utils.data import Dataset, DataLoader
 
 def pars_ini():
     global args
-
+    #
     parser = argparse.ArgumentParser(description='PyTorch actuated')
 
     #IO
