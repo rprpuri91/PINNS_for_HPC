@@ -261,10 +261,12 @@ class Preprocessing_Taylor_Green():
 
         percent = 50
 
-        per1 = 80
+        per1 = 0
         
         if t==0 and per1==0:
-            per_domain = 10
+            per_domain = 50
+        elif t!=0 and per1==0:
+            per_domain = 50
         else:
             per_domain = per1
 
@@ -333,6 +335,12 @@ class Preprocessing_Taylor_Green():
         X_physical = np.vstack([X_domain,X_train_left, X_train_right, X_train_top, X_train_bottom])
         U_grid = np.sqrt(np.square(u0) + np.square(v0))
 
+        data_len = len(np.vstack([X_train_domain,X_train_left, X_train_right, X_train_top, X_train_bottom]))
+        
+        idx2 = np.random.choice(self.X_full.shape[0], data_len, replace=False)
+
+        x_val = self.X_full[idx2,:]
+
         #plt.quiver(domain_train[:, 0], domain_train[:, 1], u0, v0, U_grid, scale=30)
         #plt.colorbar()
         print("data", X_physical.shape)
@@ -372,7 +380,11 @@ class Preprocessing_Taylor_Green():
         g8.create_dataset('data2', data=V_p_full)
         g8.create_dataset('data3', data=self.p_max)
         g8.create_dataset('data4', data=self.p_min)
-        g8.create_dataset('data5', data=X_physical)
+        if per1==0:
+            g8.create_dataset('data5', data=x_val)
+            g8.create_dataset('data6', data=X_physical)
+        else:    
+            g8.create_dataset('data5', data=X_physical)
 
         h5.close()
 

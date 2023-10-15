@@ -1,8 +1,9 @@
 {
   "ExpandedNodes": [
     "",
-    "\\data"
+    "\\data",
+    "\\Jureca"
   ],
-  "SelectedNode": "\\data\\data_Taylor_Green_Vortex_reduced20_0.h5",
+  "SelectedNode": "\\data\\data_Taylor_Green_Vortex_PINN.py",
   "PreviewInSolutionExplorer": false
 }
