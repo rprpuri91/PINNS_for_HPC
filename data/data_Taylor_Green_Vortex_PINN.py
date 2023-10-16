@@ -259,9 +259,11 @@ class Preprocessing_Taylor_Green():
         
         print('Full data points: ',self.X_full.shape)
 
+        print('Bndry data points: ',self.X_full.shape[0]-X_in1.shape[0])
+
         percent = 50
 
-        per1 = 0
+        per1 = 5
         
         if t==0 and per1==0:
             per_domain = 50
