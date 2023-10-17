@@ -263,7 +263,7 @@ class Preprocessing_Taylor_Green():
 
         percent = 50
 
-        per1 = 5
+        per1 = 30
         
         if t==0 and per1==0:
             per_domain = 50
@@ -400,7 +400,7 @@ def main():
     #preprocessing.X_gen(1)
     #for t in range(0,30):
         
-    preprocessing.data_generation(30)
+    preprocessing.data_generation(17)
         
     # X_initial = preprocessing.X_full
     # print('X', X_initial)
