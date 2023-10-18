@@ -263,7 +263,7 @@ class Preprocessing_Taylor_Green():
 
         percent = 50
 
-        per1 = 30
+        per1 = 80
         
         if t==0 and per1==0:
             per_domain = 50
