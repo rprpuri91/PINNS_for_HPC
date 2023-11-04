@@ -31,8 +31,8 @@ class Preprocessing_Taylor_Green():
         self.nu = nu
         self.n = n
 
-        x_values = np.arange(-np.pi, np.pi, 0.05).tolist()
-        y_values = np.arange(-np.pi, np.pi, 0.05).tolist()
+        x_values = np.arange(-np.pi, np.pi, 0.02).tolist()
+        y_values = np.arange(-np.pi, np.pi, 0.02).tolist()
         t = np.arange(0, 100, 1)
         x_values.append(np.pi)
         y_values.append(np.pi)
@@ -263,7 +263,7 @@ class Preprocessing_Taylor_Green():
 
         percent = 50
 
-        per1 = 80
+        per1 = 0
         
         if t==0 and per1==0:
             per_domain = 50
@@ -356,7 +356,7 @@ class Preprocessing_Taylor_Green():
         #u_full, v_full, p_full = self.normalize(u_full, v_full, p_full)
         V_p_full = np.vstack([u_full, v_full, p_full])
 
-        h5 = h5py.File('./data/data_Taylor_Green_Vortex_reduced'+str(per1)+'_'+str(t)+'.h5', 'w')
+        h5 = h5py.File('./data/data_Taylor_Green_Vortex_'+str(per1)+'_'+str(t)+'.h5', 'w')
         g1 = h5.create_group('domain')
         g1.create_dataset('data1', data=domain_train)
         g1.create_dataset('data2', data=domain_test)
@@ -398,9 +398,9 @@ def main():
     #create_data_list_csv()
     preprocessing = Preprocessing_Taylor_Green(rho, nu, n)
     #preprocessing.X_gen(1)
-    #for t in range(0,30):
+    for t in range(0,30):
         
-    preprocessing.data_generation(17)
+        preprocessing.data_generation(t)
         
     # X_initial = preprocessing.X_full
     # print('X', X_initial)
