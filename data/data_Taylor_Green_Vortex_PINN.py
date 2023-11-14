@@ -287,13 +287,7 @@ class Preprocessing_Taylor_Green():
 
         X_domain_data = X_domain[idx1,:]
 
-        # plt.scatter(self.X_left[:,0], self.X_left[:,1], color='blue')
-        # plt.scatter(self.X_right[:, 0], self.X_right[:, 1], color='blue')
-        # plt.scatter(self.X_top[:, 0], self.X_top[:, 1], color='blue')
-        # plt.scatter(self.X_bottom[:, 0], self.X_bottom[:, 1], color='blue')
-        # plt.scatter(X_domain[:,0], X_domain[:,1], color='red')
-        # plt.scatter(X_domain_data[:,0], X_domain_data[:,1], color='orange')
-        # plt.show()
+        
 
         V_p_train_domain, X_train_domain, V_p_test_domain, X_test_domain = self.train_test(X_domain_data, "domain")
         V_p_train_left, X_train_left, V_p_test_left, X_test_left = self.train_test(X_left, "left")
@@ -352,6 +346,18 @@ class Preprocessing_Taylor_Green():
 
         u_full,v_full = self.velocity(self.X_full)
         p_full = self.pressure(self.X_full)
+        
+        fig, ax = plt.subplots(1,1)
+        ax.tricontourf(self.X_full[:,0],self.X_full[:,1],u_full, levels=7, cmap='YlGnBu')
+        ax.scatter(self.X_left[:,0], self.X_left[:,1], color='black')
+        ax.scatter(self.X_right[:, 0], self.X_right[:, 1], color='black')
+        ax.scatter(self.X_top[:, 0], self.X_top[:, 1], color='black')
+        ax.scatter(self.X_bottom[:, 0], self.X_bottom[:, 1], color='black')
+        ax.scatter(X_domain[:,0][::15], X_domain[:,1][::15], color='yellow')
+        ax.scatter(X_domain_data[:,0], X_domain_data[:,1], color='red', marker='x')
+        ax.set_xticks([])
+        ax.set_yticks([])
+        plt.show()
 
         #u_full, v_full, p_full = self.normalize(u_full, v_full, p_full)
         V_p_full = np.vstack([u_full, v_full, p_full])
@@ -398,9 +404,9 @@ def main():
     #create_data_list_csv()
     preprocessing = Preprocessing_Taylor_Green(rho, nu, n)
     #preprocessing.X_gen(1)
-    for t in range(0,30):
+    #for t in range(0,31):
         
-        preprocessing.data_generation(t)
+    preprocessing.data_generation(30)
         
     # X_initial = preprocessing.X_full
     # print('X', X_initial)
