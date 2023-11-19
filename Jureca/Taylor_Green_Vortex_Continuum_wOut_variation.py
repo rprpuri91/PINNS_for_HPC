@@ -196,63 +196,43 @@ def denormalize(p_norm, p_max, p_min):
 
 class GenerateDataset(Dataset):
 
-    def __init__(self, list_id, path, steps,per):
-        self.train_data,_,_ , _, _,_ ,_= h5_loader(path)
-        
-        for t in steps:
-            path1 = './data/data_Taylor_Green_Vortex_'+str(per)+'_'+str(t)+'.h5'
-            if t==0:
-                self.train_data_i0,_,_,_,_,_,_ = h5_loader(path1)
-            else:
-                #print('else')
-                self.train_data_i,_,_,_,_,_,_ = h5_loader(path1)
-                self.train_data_i0 = np.hstack([self.train_data_i0,self.train_data_i])
-        #print('train', self.train_data_i0.shape)         
+    def __init__(self, list_id, data):
+        self.train_data= data
         self.len = len(self.train_data)
 
     def __getitem__(self,index):
         data0 = self.train_data[index]
-        datai = self.train_data_i0[index]
-        data = torch.from_numpy(data0).float()
-        data1 = torch.from_numpy(datai).float()
-        return data, data1
+        datai = torch.from_numpy(data0).float()
+        
+        return datai
 
     def __len__(self):
         return self.len    
 
 class PhysicalDataset(Dataset):
-    def __init__(self, list_id, path):
-        _,self.train_physical,_,_,_,_,_ = h5_loader(path)
+    def __init__(self, list_id, data):
+        self.train_physical = data
         self.len = len(self.train_physical)
 
     def __getitem__(self, index):
         data0 = self.train_physical[index]
-        data = torch.from_numpy(data0).float()
-        return data
+        datai = torch.from_numpy(data0).float()
+        return datai
     
     def __len__(self):
         return self.len
 
 class TestDataset(Dataset):
 
-    def __init__(self, list_id, path, trained_step,per):
-        _,_, self.test_data, _, _, _ ,_= h5_loader(path)
-        for t in trained_step:
-            path1 = './data/data_Taylor_Green_Vortex_'+str(per)+'_'+str(t)+'.h5'
-            if t==0:
-                _,_, self.test_data_i0, _,_,_,_ = h5_loader(path1)
-            else:
-                _,_, self.test_data_i, _,_,_,_ = h5_loader(path1)
-                self.test_data_i0 = np.hstack([self.test_data_i0,self.test_data_i])
-        #print('test', self.test_data_i0.shape)
+    def __init__(self, list_id, data):
+        self.test_data = data
         self.len = len(self.test_data)
 
     def __getitem__(self, index):
         data0 = self.test_data[index]
-        datai = self.test_data_i0[index]
-        data = torch.from_numpy(data0).float()
-        data1 = torch.from_numpy(datai).float()
-        return data, data1
+        datai = torch.from_numpy(data0).float()
+        
+        return datai
     
     def __len__(self):
         return self.len
@@ -339,7 +319,7 @@ def denormalize_full(V_p_norm, p_min, p_max):
     return u_norm, v_norm, p_norm
 
 # save state of the training
-def save_state(i,epoch,distrib_model,loss_acc,optimizer,res_name, grank, gwsize, is_best, loss_acc_list, rel_error_list, initial_err_list, trained_step):#,grank,gwsize,is_best):
+def save_state(i,epoch,distrib_model,loss_acc,optimizer,res_name, grank, gwsize, is_best, loss_acc_list, rel_error_list, initial_err_list):#,grank,gwsize,is_best):
     rt = time.time()
     # find if is_best happened in any worker
     is_best_m = par_allgather_obj(is_best,gwsize)
@@ -356,8 +336,7 @@ def save_state(i,epoch,distrib_model,loss_acc,optimizer,res_name, grank, gwsize,
                 'optimizer' : optimizer.state_dict(),
                 'loss_acc_list': loss_acc_list,
                 'rel_error_list': rel_error_list,
-                'initial_err_list': initial_err_list,
-                'trained_step': trained_step}
+                'initial_err_list': initial_err_list}
 
         # write on worker with is_best
         if grank == is_best_rank:
@@ -745,7 +724,7 @@ def main():
     initial_err_list = []
     trained_step = []
     # resume state
-    res_name = 'checkpoint_red0'+NN+ti+'.pth.tar'
+    res_name = 'checkpoint_red1'+NN+ti+'.pth.tar'
     if os.path.isfile(res_name) and not args.benchrun:
         try:
             dist.barrier()
@@ -794,163 +773,163 @@ def main():
 
     X_in = torch.from_numpy(X_in).float().to(device)
 
-        train_len = len(train_data_i0)
-        physical_len = len(physical_data)
-        test_len = len(test_data_i0)
+    train_len = len(train_data_i0)
+    physical_len = len(physical_data)
+    test_len = len(test_data_i0)
 
-        batches = int(train_len/args.batch_size)
-        if grank==0:
-            print('No. of batches: ',batches)
-        batch_size_physical = int(physical_len/batches)
+    batches = int(train_len/args.batch_size)
+    if grank==0:
+        print('No. of batches: ',batches)
+    batch_size_physical = int(physical_len/batches)
 
-        # restricts data loading to a subset of the dataset exclusive to the current process
-        args.shuff = args.shuff and not args.testrun
-        train_sampler = torch.utils.data.distributed.DistributedSampler(dataset = GenerateDataset([x for x in range(train_len)], train_data_i0), num_replicas=gwsize, rank=grank, shuffle=True)
-        physical_sampler = torch.utils.data.distributed.DistributedSampler(dataset = PhysicalDataset([x for x in range(physical_len)], physical_data), num_replicas=gwsize, rank=grank, shuffle=True)        
-        test_sampler = torch.utils.data.distributed.DistributedSampler(dataset = TestDataset([x for x in range(test_len)], path, test_data_i0), num_replicas=gwsize, rank=grank, shuffle=True)
+    # restricts data loading to a subset of the dataset exclusive to the current process
+    args.shuff = args.shuff and not args.testrun
+    train_sampler = torch.utils.data.distributed.DistributedSampler(dataset = GenerateDataset([x for x in range(train_len)], train_data_i0), num_replicas=gwsize, rank=grank, shuffle=True)
+    physical_sampler = torch.utils.data.distributed.DistributedSampler(dataset = PhysicalDataset([x for x in range(physical_len)], physical_data), num_replicas=gwsize, rank=grank, shuffle=True)        
+    test_sampler = torch.utils.data.distributed.DistributedSampler(dataset = TestDataset([x for x in range(test_len)], path, test_data_i0), num_replicas=gwsize, rank=grank, shuffle=True)
 
-        # persistent workers
-        pers_w = True if args.nworker>1 else False
+    # persistent workers
+    pers_w = True if args.nworker>1 else False
         
-        # deterministic testrun - the same dataset each run
-        kwargs = {'worker_init_fn': seed_worker, 'generator': g} if args.testrun else {}
+    # deterministic testrun - the same dataset each run
+    kwargs = {'worker_init_fn': seed_worker, 'generator': g} if args.testrun else {}
 
-        train_loader = torch.utils.data.DataLoader(dataset = GenerateDataset([x for x in range(train_len)],train_data_i0), 
-                                                            batch_size=args.batch_size, 
-                                                            sampler = train_sampler, 
-                                                            num_workers=args.nworker, 
-                                                            pin_memory=False, 
-                                                            persistent_workers=pers_w, 
-                                                            drop_last=True, prefetch_factor=args.prefetch, **kwargs)
-        physical_loader = torch.utils.data.DataLoader(dataset = PhysicalDataset([x for x in range(physical_len)], physical_data), 
-                                                   batch_size=batch_size_physical,
-                                                   sampler = physical_sampler,
-                                                   num_workers=args.nworker, pin_memory=False,
-                                                   persistent_workers=pers_w, drop_last=True,
-                                                   prefetch_factor=args.prefetch, **kwargs)
-        test_loader = torch.utils.data.DataLoader(dataset = TestDataset([x for x in range(test_len)], test_data_i0), batch_size=2,
-                                                  sampler=test_sampler, num_workers=args.nworker, pin_memory=False,
-                                                  persistent_workers=pers_w, drop_last=True,
-                                                  prefetch_factor=args.prefetch, **kwargs)
+    train_loader = torch.utils.data.DataLoader(dataset = GenerateDataset([x for x in range(train_len)],train_data_i0), 
+                                                        batch_size=args.batch_size, 
+                                                        sampler = train_sampler, 
+                                                        num_workers=args.nworker, 
+                                                        pin_memory=False, 
+                                                        persistent_workers=pers_w, 
+                                                        drop_last=True, prefetch_factor=args.prefetch, **kwargs)
+    physical_loader = torch.utils.data.DataLoader(dataset = PhysicalDataset([x for x in range(physical_len)], physical_data), 
+                                                batch_size=batch_size_physical,
+                                                sampler = physical_sampler,
+                                                num_workers=args.nworker, pin_memory=False,
+                                                persistent_workers=pers_w, drop_last=True,
+                                                prefetch_factor=args.prefetch, **kwargs)
+    test_loader = torch.utils.data.DataLoader(dataset = TestDataset([x for x in range(test_len)], test_data_i0), batch_size=2,
+                                                sampler=test_sampler, num_workers=args.nworker, pin_memory=False,
+                                                persistent_workers=pers_w, drop_last=True,
+                                                prefetch_factor=args.prefetch, **kwargs)
 
 
-        # start training/testing loop
+    # start training/testing loop
+    if grank==0:
+        print('TIMER broadcast:', time.time()-st, 's')
+        print(f'\nDEBUG: start training')
+        print(f'------------------------------------------')
+
+    et = time.time()
+
+    test_acc_list = []
+    lr_list = []
+    for epoch in range(start_epoch, args.epochs + 1):
+
+        lt = time.time()
+
+        #training
+        if args.benchrun and epoch==args.epochs:
+            with torch.autograd.profiler.profile(use_cuda=args.cuda, profile_memory=True) as prof:
+                loss_acc = train(distrib_model, device, train_loader,physical_loader, optimizer,epoch, grank, gwsize, rho, mu, p_max,p_min, trained_step,NN)
+        else:
+            loss_acc = train(distrib_model, device, train_loader,physical_loader, optimizer, epoch, grank, gwsize, rho, mu, p_max, p_min, trained_step,NN)
+
+        loss_acc_list.append(loss_acc)
+
+        # testing
+        acc_test, rel_err, error_initial = test(distrib_model, device, test_loader, grank, gwsize, rho, mu, trained_step)
+
+        # lr Scheduler
+        #scheduler.step()
+
+        latest_lr = scheduler.get_last_lr()
+
+        if grank == 0 and lrank == 0:
+            print('Time: ',t[i+1])
+            print('Epoch finished')
+            print('Epoch: {:03d}, Loss: {:.5f}, Test MSE: {:.5f}, Test Error: {:.5f}, Initial_Error: {:.5f}'.
+                format(epoch, loss_acc, acc_test, rel_err, error_initial))
+
+        lr_list.append(latest_lr)
+
+        test_acc_list.append(acc_test)
+        rel_error_list.append(rel_err)
+        initial_err_list.append(error_initial)
+
+        if epoch == start_epoch:
+            first_ep_t = time.time() - lt
+
+        # final epoch
+        if epoch + 1 == args.epochs:
+            train_loader.last_epoch = True
+            test_loader.last_epoch = True
+
         if grank==0:
-            print('TIMER broadcast:', time.time()-st, 's')
-            print(f'\nDEBUG: start training')
-            print(f'------------------------------------------')
+            print(f'\n--------------------------------------------------------')
+            print(f'TIMER: epoch time:', time.time()-lt, 's')
+            print(f'DEBUG: accuracy:', acc_test, '%')
+            if args.benchrun and epoch==args.epoch:
+                print(f'\n----------------------------------------')
+                print(f'DEBUG: benchmark of last epoch:\n')
+                what1 = 'cuda' if args.cuda else 'cpu'
+                print(prof.key_averages().table(sort_by='self_'+str(what1)+'_time_total'))
 
-        et = time.time()
-
-        test_acc_list = []
-        lr_list = []
-        for epoch in range(start_epoch, args.epochs + 1):
-
-            lt = time.time()
-
-            #training
-            if args.benchrun and epoch==args.epochs:
-                with torch.autograd.profiler.profile(use_cuda=args.cuda, profile_memory=True) as prof:
-                    loss_acc = train(distrib_model, device, train_loader,physical_loader, optimizer,epoch, grank, gwsize, rho, mu, p_max,p_min, trained_step,NN)
-            else:
-                loss_acc = train(distrib_model, device, train_loader,physical_loader, optimizer, epoch, grank, gwsize, rho, mu, p_max, p_min, trained_step,NN)
-
-            loss_acc_list.append(loss_acc)
-
-            # testing
-            acc_test, rel_err, error_initial = test(distrib_model, device, test_loader, grank, gwsize, rho, mu, trained_step)
-
-            # lr Scheduler
-            #scheduler.step()
-
-            latest_lr = scheduler.get_last_lr()
-
-            if grank == 0 and lrank == 0:
-                print('Time: ',t[i+1])
-                print('Epoch finished')
-                print('Epoch: {:03d}, Loss: {:.5f}, Test MSE: {:.5f}, Test Error: {:.5f}, Initial_Error: {:.5f}'.
-                    format(epoch, loss_acc, acc_test, rel_err, error_initial))
-
-            lr_list.append(latest_lr)
-
-            test_acc_list.append(acc_test)
-            rel_error_list.append(rel_err)
-            initial_err_list.append(error_initial)
-
-            if epoch == start_epoch:
-                first_ep_t = time.time() - lt
-
-            # final epoch
-            if epoch + 1 == args.epochs:
-                train_loader.last_epoch = True
-                test_loader.last_epoch = True
-
+        # if a better state is found
+        is_best = loss_acc < best_acc
+        if epoch % args.restart_int == 0 and not args.benchrun:
             if grank==0:
-                print(f'\n--------------------------------------------------------')
-                print(f'TIMER: epoch time:', time.time()-lt, 's')
-                print(f'DEBUG: accuracy:', acc_test, '%')
-                if args.benchrun and epoch==args.epoch:
-                    print(f'\n----------------------------------------')
-                    print(f'DEBUG: benchmark of last epoch:\n')
-                    what1 = 'cuda' if args.cuda else 'cpu'
-                    print(prof.key_averages().table(sort_by='self_'+str(what1)+'_time_total'))
-
-            # if a better state is found
-            is_best = loss_acc < best_acc
-            if epoch % args.restart_int == 0 and not args.benchrun:
-                if grank==0:
-                    print('Saving: ', res_name)
-                save_state(i,epoch, distrib_model, loss_acc, optimizer, res_name, grank, gwsize, is_best, loss_acc_list, rel_error_list, initial_err_list, trained_step)
-                #save_state(epoch, model, loss_acc, optimizer, res_name)
-                best_acc = min(loss_acc, best_acc)
-                g = X_in.clone()
-                V_p_pred_norm = distrib_model(X_in)
-                u_pred, v_pred, p_pred = denormalize_full(V_p_pred_norm[:,0:3], p_min, p_max)
-                with torch.no_grad():
-                    #V_p_star = V_p_star.cpu().detach().numpy()
-                    g = g.cpu().detach().numpy()
-                    #V_p_pred_norm = V_p_pred_norm.cpu().detach().numpy()
-                    u_pred = u_pred.cpu().detach().numpy()
-                    v_pred = v_pred.cpu().detach().numpy()
-                    p_pred = p_pred.cpu().detach().numpy()
-                    loss = np.asarray(loss_acc_list)
-                    error = np.asarray(rel_error_list)
-                    lr = np.asarray(lr_list)
-                    initial_error = np.asarray(initial_err_list)
-                    #result = [V_p_star,X_in,V_p_pred_norm, u_pred,v_pred, p_pred, loss_acc_list, rel_error_list, lr_list, initial_err_list]
-                    if grank == 0:
-                        h5 = h5py.File('./result/result_Taylor_Green_Vortex_'+NN+str(per)+str(t[i+1])+'_'+str(epoch)+'.h5', 'w')
-                        g1 = h5.create_group('result')
-                        g1.create_dataset('star', data=V_p_star)
-                        g1.create_dataset('X_in', data=g)
-                        g1.create_dataset('u_pred', data=u_pred)
-                        g1.create_dataset('v_pred', data=v_pred)
-                        g1.create_dataset('p_pred', data=p_pred)
-                        g1.create_dataset('loss', data=loss)
-                        g1.create_dataset('error', data=error)
-                        g1.create_dataset('lr', data=lr)
-                        g1.create_dataset('initial', data=initial_error)
-                        h5.close()
-                '''if grank == 0:
-                    print('Saving results at epoch: ',epoch)
-                f = open('./result/result_Taylor_green_vortex_reduced'+str(t[i])+'_'+str(epoch)+'.pkl', 'wb')
-                pickle.dump(result, f)
-                f.close()'''
-
-            if grank==0:
-                print(epoch)
-
-        start_epoch = 1
-
-        #finalise training
-        # save final state
-        if not args.benchrun and epoch==args.epochs:
-            save_state(i,epoch, distrib_model, loss_acc, optimizer, res_name, grank, gwsize, True, loss_acc_list, rel_error_list, initial_err_list, trained_step)
+                print('Saving: ', res_name)
+            save_state(i,epoch, distrib_model, loss_acc, optimizer, res_name, grank, gwsize, is_best, loss_acc_list, rel_error_list, initial_err_list)
             #save_state(epoch, model, loss_acc, optimizer, res_name)
-        dist.barrier()
+            best_acc = min(loss_acc, best_acc)
+            g = X_in.clone()
+            V_p_pred_norm = distrib_model(X_in)
+            u_pred, v_pred, p_pred = denormalize_full(V_p_pred_norm[:,0:3], p_min, p_max)
+            with torch.no_grad():
+                #V_p_star = V_p_star.cpu().detach().numpy()
+                g = g.cpu().detach().numpy()
+                #V_p_pred_norm = V_p_pred_norm.cpu().detach().numpy()
+                u_pred = u_pred.cpu().detach().numpy()
+                v_pred = v_pred.cpu().detach().numpy()
+                p_pred = p_pred.cpu().detach().numpy()
+                loss = np.asarray(loss_acc_list)
+                error = np.asarray(rel_error_list)
+                lr = np.asarray(lr_list)
+                initial_error = np.asarray(initial_err_list)
+                #result = [V_p_star,X_in,V_p_pred_norm, u_pred,v_pred, p_pred, loss_acc_list, rel_error_list, lr_list, initial_err_list]
+                if grank == 0:
+                    h5 = h5py.File('./result/result_Taylor_Green_Vortex_'+NN+str(per)+str(t[i+1])+'_'+str(epoch)+'.h5', 'w')
+                    g1 = h5.create_group('result')
+                    g1.create_dataset('star', data=V_p_star)
+                    g1.create_dataset('X_in', data=g)
+                    g1.create_dataset('u_pred', data=u_pred)
+                    g1.create_dataset('v_pred', data=v_pred)
+                    g1.create_dataset('p_pred', data=p_pred)
+                    g1.create_dataset('loss', data=loss)
+                    g1.create_dataset('error', data=error)
+                    g1.create_dataset('lr', data=lr)
+                    g1.create_dataset('initial', data=initial_error)
+                    h5.close()
+            '''if grank == 0:
+                print('Saving results at epoch: ',epoch)
+            f = open('./result/result_Taylor_green_vortex_reduced'+str(t[i])+'_'+str(epoch)+'.pkl', 'wb')
+            pickle.dump(result, f)
+            f.close()'''
 
         if grank==0:
-            print('Sequence finsihed for t=',t[i+1])
+            print(epoch)
+
+    start_epoch = 1
+
+    #finalise training
+    # save final state
+    if not args.benchrun and epoch==args.epochs:
+        save_state(i,epoch, distrib_model, loss_acc, optimizer, res_name, grank, gwsize, True, loss_acc_list, rel_error_list, initial_err_list, trained_step)
+        #save_state(epoch, model, loss_acc, optimizer, res_name)
+    dist.barrier()
+
+    if grank==0:
+        print('Sequence finsihed for t=',t[i+1])
 
 
     if grank == 0:
