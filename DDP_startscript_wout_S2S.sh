@@ -5,13 +5,13 @@
 #SBATCH --account=raise-ctp2
 #SBATCH --mail-user=
 #SBATCH --mail-type=ALL
-#SBATCH --output=job_tgv80b.out
-#SBATCH --error=job_tgv80b.err
-#SBATCH --time=16:00:00
+#SBATCH --output=job_tgvt1.out
+#SBATCH --error=job_tgvt1.err
+#SBATCH --time=10:00:00
 
 # configure node and process count on the CM
 #SBATCH --partition=dc-gpu
-#SBATCH --nodes=10
+#SBATCH --nodes=8
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=128
 #SBATCH --gpus-per-node=4
@@ -22,19 +22,20 @@
 
 # parameters
 debug=false # do debug
-bs=16       # batch-size
+bs=8       # batch-size
 epochs=30000    # epochs
 lr=0.003     # learning rate
 gamma=0.999 # gamma for decay
 restartInt=2000 # restart interval for saving
-train_percent=80 # ground truth percentage in train
-test_ID='80' # test ID based on training data 
+train_percent=10 # ground truth percentage in train
+test_ID='10' # test ID based on training data 
 NN='DNN' # training model type
 
 # AT
 #dataDir="/p/scratch/raise-ctp2/T31_LD/"
 #COMMAND="./Jureca/Taylor_Green_Vortex_PINN_noCentre.py"
-COMMAND="./Jureca/Taylor_Green_Vortex_Continuum_data_variation.py"
+#COMMAND="./Jureca/Taylor_Green_Vortex_Continuum_data_variation.py"
+COMMAND="./Jureca/Taylor_Green_Vortex_Continuum_wOut_variation.py"
 #COMMAND="./Jureca/Taylor_Green_Vortex_Continuum_data_free.py"
 #COMMAND="./data/data_Taylor_Green_Vortex_PINN.py"
 EXEC="$COMMAND \

@@ -21,7 +21,9 @@ def pars_ini():
     parser.add_argument('--data-dir', default='./', help='location of the training dataset')
     parser.add_argument('--restart-int', type=int, default=10, help='restart interval per epoch (default: 10)')
     parser.add_argument('--test_ID', type=str, default='0', help='Save file saved based on training data')
-
+    parser.add_argument('--testing', type=str, default='0', help='flag for turning on testing of the model')
+    parser.add_argument('--chkpnt', type=str, default='red0', help='Restart checkpoint')
+    
     #model
     parser.add_argument('--batch-size', type=int, default=16, help='input batch size for training (default: 16)')
     parser.add_argument('--epochs', type=int, default=72, help='number of training epochs (default: 10)')
@@ -33,6 +35,7 @@ def pars_ini():
                         help='shuffle dataset (default: False)')
     parser.add_argument('--train_percent', type=int, default=0, help='percent data from domain used for training with ground truth')
     parser.add_argument('--model_type', type=str, default='PINN', help='define model type')
+    parser.add_argument('--time_step', type=int, default=5, help='time interval for testing')
     # debug parsers
     parser.add_argument('--testrun', action='store_true', default=False,
                         help='do a test run with seed (default: False)')
@@ -200,7 +203,7 @@ class GenerateDataset(Dataset):
         self.train_data,_,_ , _, _,_ ,_= h5_loader(path)
         
         for t in trained_step:
-            path1 = './data/data_Taylor_Green_Vortex_reduced'+str(per)+'_'+str(t)+'.h5'
+            path1 = './data/data_Taylor_Green_Vortex_'+str(per)+'_'+str(t)+'.h5'
             if t==0:
                 self.train_data_i0,_,_,_,_,_,_ = h5_loader(path1)
             else:
@@ -238,7 +241,7 @@ class TestDataset(Dataset):
     def __init__(self, list_id, path, trained_step,per):
         _,_, self.test_data, _, _, _ ,_= h5_loader(path)
         for t in trained_step:
-            path1 = './data/data_Taylor_Green_Vortex_reduced'+str(per)+'_'+str(t)+'.h5'
+            path1 = './data/data_Taylor_Green_Vortex_'+str(per)+'_'+str(t)+'.h5'
             if t==0:
                 _,_, self.test_data_i0, _,_,_,_ = h5_loader(path1)
             else:
@@ -473,9 +476,10 @@ def total_loss(model, data,physical_data, data1, device, rho, mu, p_min, p_max, 
 
     inputs = data[:,0:3].to(device)
     phy_input = physical_data.to(device)
-    if grank==0:
+    '''if grank==0:
         print("phy_input", phy_input)
         print("inputs", inputs)
+    '''
     #flag = data[:6]
     #print('input', inputs)
     
@@ -522,11 +526,11 @@ def total_loss(model, data,physical_data, data1, device, rho, mu, p_min, p_max, 
     s22 =  torch.reshape(s22, (s22.shape[0],1))
     s12 = torch.reshape(s12, (s12.shape[0],1))
 
-    u_x_y_t = torch.autograd.grad(u,g,torch.ones([inputs.shape[0], 1]).to(device), create_graph=True)[0]
-    v_x_y_t = torch.autograd.grad(v,g,torch.ones([inputs.shape[0], 1]).to(device), create_graph=True)[0]
-    s_11_x_y_t = torch.autograd.grad(s11,g,torch.ones([inputs.shape[0], 1]).to(device), create_graph=True)[0]
-    s_12_x_y_t = torch.autograd.grad(s12,g,torch.ones([inputs.shape[0], 1]).to(device), create_graph=True)[0]
-    s_22_x_y_t = torch.autograd.grad(s22,g,torch.ones([inputs.shape[0], 1]).to(device), create_graph=True)[0]
+    u_x_y_t = torch.autograd.grad(u,g,torch.ones([phy_input.shape[0], 1]).to(device), create_graph=True)[0]
+    v_x_y_t = torch.autograd.grad(v,g,torch.ones([phy_input.shape[0], 1]).to(device), create_graph=True)[0]
+    s_11_x_y_t = torch.autograd.grad(s11,g,torch.ones([phy_input.shape[0], 1]).to(device), create_graph=True)[0]
+    s_12_x_y_t = torch.autograd.grad(s12,g,torch.ones([phy_input.shape[0], 1]).to(device), create_graph=True)[0]
+    s_22_x_y_t = torch.autograd.grad(s22,g,torch.ones([phy_input.shape[0], 1]).to(device), create_graph=True)[0]
 
     #if grank == 0:
         #print('uxyt', u_x_y_t.shape)
@@ -627,7 +631,7 @@ def total_loss(model, data,physical_data, data1, device, rho, mu, p_min, p_max, 
 def main():
 
     # get parse arguments
-    pars_ini()
+    #pars_ini()
 
     # check for CUDA
     args.cuda = not args.no_cuda and torch.cuda.is_available()
@@ -686,7 +690,13 @@ def main():
         print('DEBUG: args.train_percent:', args.train_percent, '\n')
         print('DEBUG: args.test_ID:', args.test_ID, '\n')
         print('DEBUG: args.model_type:', args.model_type, '\n')
-
+    
+        print('DEBUG: args.testing:', args.testing, 'OFF', '\n')
+        #print('DEBUG: args.time_step:', args.time_step, '\n')
+        
+            
+        
+    
     # encapsulate the model on the GPU assigned to the current process
     device = torch.device('cuda' if args.cuda and torch.cuda.is_available() else 'cpu',lrank)
     if args.cuda:
@@ -744,7 +754,7 @@ def main():
     initial_err_list = []
     trained_step = []
     # resume state
-    res_name = 'checkpoint_red'+NN+ti+'.pth.tar'
+    res_name = 'checkpoint_red0'+NN+ti+'.pth.tar'
     if os.path.isfile(res_name) and not args.benchrun:
         try:
             dist.barrier()
@@ -786,7 +796,7 @@ def main():
         if grank==0:
             print('Starting training for t=',t[i+1])
 
-        path = './data/data_Taylor_Green_Vortex_reduced'+str(per)+'_'+str(t[i+1])+'.h5'
+        path = './data/data_Taylor_Green_Vortex_'+str(per)+'_'+str(t[i+1])+'.h5'
 
         train_data,physical_data, test_data, X_in, V_p_star, p_max, p_min = h5_loader(path)
 
@@ -824,8 +834,8 @@ def main():
                                                    persistent_workers=pers_w, drop_last=True,
                                                    prefetch_factor=args.prefetch, **kwargs)
         physical_loader = torch.utils.data.DataLoader(dataset = PhysicalDataset([x for x in range(physical_len)], path), 
-                                                   batch_size=args.batch_size,
-                                                   sampler = train_sampler,
+                                                   batch_size=batch_size_physical,
+                                                   sampler = physical_sampler,
                                                    num_workers=args.nworker, pin_memory=False,
                                                    persistent_workers=pers_w, drop_last=True,
                                                    prefetch_factor=args.prefetch, **kwargs)
@@ -920,7 +930,7 @@ def main():
                     initial_error = np.asarray(initial_err_list)
                     #result = [V_p_star,X_in,V_p_pred_norm, u_pred,v_pred, p_pred, loss_acc_list, rel_error_list, lr_list, initial_err_list]
                     if grank == 0:
-                        h5 = h5py.File('./result/result_Taylor_Green_Vortex_reduced'+NN+str(per)+str(t[i+1])+'_'+str(epoch)+'.h5', 'w')
+                        h5 = h5py.File('./result/result_Taylor_Green_Vortex_'+NN+str(per)+str(t[i+1])+'_'+str(epoch)+'.h5', 'w')
                         g1 = h5.create_group('result')
                         g1.create_dataset('star', data=V_p_star)
                         g1.create_dataset('X_in', data=g)
@@ -971,10 +981,10 @@ def main():
     # clean-up
     dist.destroy_process_group()
 
-def test_model(per,t):
+def test_model(NN,per,t,chkpnt):
     
      # get parse arguments
-    pars_ini()
+    #pars_ini()
 
     # check for CUDA
     args.cuda = not args.no_cuda and torch.cuda.is_available()
@@ -1030,7 +1040,13 @@ def test_model(per,t):
         print('DEBUG: args.prefetch:', args.prefetch)
         print('DEBUG: args.cuda:', args.cuda)
         print('DEBUG: args.benchrun:', args.benchrun, '\n')
-    
+        print('DEBUG: args.train_percent:', args.train_percent, '\n')
+        print('DEBUG: args.test_ID:', args.test_ID, '\n')
+        print('DEBUG: args.model_type:', args.model_type, '\n')
+
+        print('DEBUG: args.testing:', args.testing, 'ON', '\n')
+        print('DEBUG: args.time_step:', args.time_step, '\n')
+        print('DEBUG: args.chkpnt:', args.chkpnt, '\n')
 
     device = torch.device('cuda' if args.cuda and torch.cuda.is_available() else 'cpu',lrank)
     if args.cuda:
@@ -1068,7 +1084,11 @@ def test_model(per,t):
     start = 0
     start_epoch = 1
     best_acc = np.inf
-    res_name = 'checkpoint_red'+str(per)+'.pth.tar'
+
+
+
+    res_name = 'checkpoint_'+chkpnt+NN+str(per)+'.pth.tar'
+    print(res_name)
     if os.path.isfile(res_name) and not args.benchrun:
         try:
             dist.barrier()
@@ -1091,7 +1111,7 @@ def test_model(per,t):
                 print(e)
                 print(f'WARNING: restart file cannot be loaded, restarting!')
      
-    path = './data/data_Taylor_Green_Vortex_reduced'+str(per)+'_'+str(t)+'.h5'
+    path = './data/data_Taylor_Green_Vortex_'+str(per)+'_'+str(t)+'.h5'
 
     train_data,physical_data, test_data, X_in, V_p_star, p_max, p_min = h5_loader(path)
 
@@ -1099,7 +1119,26 @@ def test_model(per,t):
 
     V_p_pred_norm = distrib_model(g)
     u_pred, v_pred, p_pred = denormalize_full(V_p_pred_norm[:,0:3], p_min, p_max)
+   
+    #print('star size: ', V_p_star.shape)
+    #print('pred size: ', V_p_pred_norm[:,0:3].shape)
 
+    l_2_error = torch.linalg.norm((torch.from_numpy(V_p_star.T).to(device) - V_p_pred_norm[:,0:3]), 2) / torch.linalg.norm(torch.from_numpy(V_p_star.T).to(device), 2)
+
+    print('L_2 error: ', l_2_error) 
+
+    u_exact = V_p_star.T[:,0]
+    v_exact = V_p_star.T[:,1]
+    p_exact = V_p_star.T[:,2]
+
+    error_u = torch.linalg.norm((torch.from_numpy(u_exact).to(device) - u_pred), 2) / torch.linalg.norm(torch.from_numpy(u_exact).to(device), 2)
+    error_v = torch.linalg.norm((torch.from_numpy(v_exact).to(device) - v_pred), 2) / torch.linalg.norm(torch.from_numpy(v_exact).to(device), 2)
+    error_p = torch.linalg.norm((torch.from_numpy(p_exact).to(device) - p_pred), 2) / torch.linalg.norm(torch.from_numpy(p_exact).to(device), 2)
+
+    print('error_u: ', error_u)
+    print('error_v: ', error_v)
+    print('error_p: ', error_p)
+    
     u_pred = u_pred.cpu().detach().numpy()
     v_pred = v_pred.cpu().detach().numpy()
     p_pred = p_pred.cpu().detach().numpy()
@@ -1110,7 +1149,7 @@ def test_model(per,t):
     #print(X_in)
     if grank == 0:
     
-        h5 = h5py.File('./result/test_Taylor_Green_Vortex_reduced'+str(per)+str(t)+'.h5', 'w')
+        h5 = h5py.File('./result/test_Taylor_Green_Vortex_reduced_'+NN+str(per)+str(t)+'.h5', 'w')
         g1 = h5.create_group('result')
         g1.create_dataset('star', data=V_p_star)
         g1.create_dataset('X_in', data=X_in)
@@ -1119,14 +1158,19 @@ def test_model(per,t):
         g1.create_dataset('p_pred', data=p_pred)
         h5.close()
     
-        print('Testing of model for '+str(per)+' percent finished')                
+        print('Testing of '+NN+' model for '+str(per)+' percent finished')                
     
-    
+# get parse arguments
+pars_ini()    
 
-'''if __name__ == "__main__":
-    main()
+if args.testing=='1':
+    test_model(args.model_type, args.train_percent, args.time_step, args.chkpnt)
     sys.exit()
-'''
-test_model(10,10)
+else:
+    if __name__ == "__main__":
+        main()
+        sys.exit()
+
+#test_model('DNN',10,17)
     
 #h5_loader()

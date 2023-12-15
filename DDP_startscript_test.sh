@@ -5,16 +5,16 @@
 #SBATCH --account=raise-ctp2
 #SBATCH --mail-user=
 #SBATCH --mail-type=ALL
-#SBATCH --output=job_tgv80b.out
-#SBATCH --error=job_tgv80b.err
-#SBATCH --time=16:00:00
+#SBATCH --time=02:00:00
+#SBATCH --output=job_tgv10.out
+#SBATCH --error=job_tgv10.err
 
 # configure node and process count on the CM
-#SBATCH --partition=dc-gpu
-#SBATCH --nodes=10
+#SBATCH --partition=dc-gpu-devel
+#SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=128
-#SBATCH --gpus-per-node=4
+#SBATCH --gpus-per-node=1
 #SBATCH --exclusive
 
 # gres options have to be disabled for deepv
@@ -22,14 +22,17 @@
 
 # parameters
 debug=false # do debug
-bs=16       # batch-size
+bs=8       # batch-size
 epochs=30000    # epochs
 lr=0.003     # learning rate
 gamma=0.999 # gamma for decay
 restartInt=2000 # restart interval for saving
-train_percent=80 # ground truth percentage in train
-test_ID='80' # test ID based on training data 
+ts=17 # time interval for testing
+train_percent=40 # ground truth percentage in train
+test_ID='40' # test ID based on training data
 NN='DNN' # training model type
+testing=1 # testing model post training
+checkpoint='red0' # restart checkpoint
 
 # AT
 #dataDir="/p/scratch/raise-ctp2/T31_LD/"
@@ -45,6 +48,9 @@ EXEC="$COMMAND \
   --train_percent $train_percent\
   --test_ID $test_ID\
   --model_type $NN\
+  --testing $testing\
+  --time_step $ts\
+  --chkpnt $checkpoint\
   --nworker $SLURM_CPUS_PER_TASK"
 #--data-dir $dataDir"
 
