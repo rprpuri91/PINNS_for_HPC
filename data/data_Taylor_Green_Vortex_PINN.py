@@ -228,6 +228,8 @@ class Preprocessing_Taylor_Green():
         return V_p_train.T, X_train1, V_p_test.T, X_test1
 
     def X_gen(self,t):
+        
+        indices_nearW = []
 
         t0 = np.zeros((self.x_domain.flatten().shape))
         t1 = np.zeros((self.X_left.shape[0]))
@@ -244,16 +246,35 @@ class Preprocessing_Taylor_Green():
         X_right = np.vstack([self.X_right[:,0], self.X_right[:,1], t2]).T
         X_top = np.vstack([self.X_top[:,0], self.X_top[:,1], t3]).T
         X_bottom = np.vstack([self.X_bottom[:,0], self.X_bottom[:,1], t4]).T
+        
+        x_left = X_left[0][0] 
+        x_right = X_right[0][0]
+        y_top = X_top[0][1]
+        y_bottom = X_bottom[0][1]
+        
+        print('limits: left-right-top-bottom', x_left, x_right, y_top, y_bottom)
 
-        return X_domain, X_left, X_right, X_top, X_bottom
+        h1 = (x_right-x_left)/40
+        
+        
+        for i in range(X_domain.shape[0]):
+            if (X_domain[i][0]>x_left and X_domain[i][0]< x_left + h1) or (X_domain[i][0]<x_right and X_domain[i][0]>x_right - h1):
+                indices_nearW.append(i)
+            elif (X_domain[i][1]>y_bottom and X_domain[i][1]< y_bottom + h1) or (X_domain[i][1]<y_top and X_domain[i][1]>y_top - h1):
+                indices_nearW.append(i)
+                    
+        X_nearW = np.take(X_domain, indices_nearW, axis=0)
 
-    def data_generation(self,t):
+        return X_domain, X_left, X_right, X_top, X_bottom, X_nearW
 
-        #t=30
-
-        X_in1, X_left, X_right, X_top, X_bottom = self.X_gen(t)
+    def data_generation(self,t, nearW, X_in1, X_left, X_right, X_top, X_bottom, X_nearW):        
 
         print("Domain size", X_in1.shape)
+
+        print("Near wall points: ", X_nearW.shape)
+
+        #plt.scatter(X_nearW[:,0], X_nearW[:,1], marker='.')
+        #plt.show()
 
         self.X_full = np.vstack([X_in1, X_left, X_right, X_top, X_bottom])
         
@@ -287,9 +308,13 @@ class Preprocessing_Taylor_Green():
 
         X_domain_data = X_domain[idx1,:]
 
+        print("Domain data with exact sol.: ", X_domain_data.shape)
         
-
-        V_p_train_domain, X_train_domain, V_p_test_domain, X_test_domain = self.train_test(X_domain_data, "domain")
+        if nearW:
+            V_p_train_domain, X_train_domain, V_p_test_domain, X_test_domain = self.train_test(X_nearW, "domain")    
+        else:
+            V_p_train_domain, X_train_domain, V_p_test_domain, X_test_domain = self.train_test(X_domain_data, "domain")
+        
         V_p_train_left, X_train_left, V_p_test_left, X_test_left = self.train_test(X_left, "left")
         V_p_train_right, X_train_right, V_p_test_right, X_test_right = self.train_test(X_right, "right")
         V_p_train_top, X_train_top, V_p_test_top, X_test_top = self.train_test(X_top, "top")
@@ -361,8 +386,11 @@ class Preprocessing_Taylor_Green():
 
         #u_full, v_full, p_full = self.normalize(u_full, v_full, p_full)
         V_p_full = np.vstack([u_full, v_full, p_full])
-
-        h5 = h5py.File('./data/data_Taylor_Green_Vortex_'+str(per1)+'_'+str(t)+'.h5', 'w')
+        
+        if nearW:
+            h5 = h5py.File('./data/data_Taylor_Green_Vortex_nearW'+str(per1)+'_'+str(t)+'.h5', 'w')
+        else:
+            h5 = h5py.File('./data/data_Taylor_Green_Vortex_'+str(per1)+'_'+str(t)+'.h5', 'w')
         g1 = h5.create_group('domain')
         g1.create_dataset('data1', data=domain_train)
         g1.create_dataset('data2', data=domain_test)
@@ -400,14 +428,17 @@ def main():
     rho = 1.0
     nu = 0.01
     n = 0.9
-
+    nearW = True
     #create_data_list_csv()
     preprocessing = Preprocessing_Taylor_Green(rho, nu, n)
     #preprocessing.X_gen(1)
-    for t in range(0,31):
-        
-        preprocessing.data_generation(t)
-        
+    ts = np.arange(0,30,5)
+    # for t in ts:        
+    #     X_in1, X_left, X_right, X_top, X_bottom, X_nearW = preprocessing.X_gen(t)
+    #     preprocessing.data_generation(t,nearW, X_in1, X_left, X_right, X_top, X_bottom, X_nearW)
+    
+    X_in1, X_left, X_right, X_top, X_bottom, X_nearW = preprocessing.X_gen(t)
+    preprocessing.data_generation(17,nearW, X_in1, X_left, X_right, X_top, X_bottom, X_nearW)
     # X_initial = preprocessing.X_full
     # print('X', X_initial)
     # u_initial, v_initial =preprocessing.velocity(X_initial)
